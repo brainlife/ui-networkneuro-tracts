@@ -189,7 +189,7 @@ background-color: black;
     right: 0px;
 }
 .amatrix .label {
-    font: 11px sans-seris;
+    font: 9px Tahoma, Verdana;
     fill: white;
 }
 .amatrix .label-vert {
