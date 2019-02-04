@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const fs = require('fs');
 
 /*
@@ -83,4 +85,4 @@ for(let a = 0; a < columns.length;a++) {
     }
 }
 
-fs.writeFileSync("networkneuro/index.json", JSON.stringify(rois, null, 4));
+fs.writeFileSync("networkneuro/index.js", "var roi_pairs = "+JSON.stringify(rois, null, 4));
