@@ -157,7 +157,7 @@ text-decoration:none;
 .loading {
 position: absolute;
 bottom:15px;
-left: 100px;
+right: 100px;
 font-size: 16px;
 opacity:.2;
 color:white;
@@ -183,15 +183,28 @@ background-color: black;
 }
 
 .amatrix {
-    /*background-color: rgba(0,0,0,0.5);*/
-    position: fixed;
-    top: 0px;
-    right: 0px;
+/*background-color: rgba(0,0,0,0.5);*/
+position: fixed;
+top: 0px;
+left: 0px;
+height: 100%;
+}
+.amatrix,
+.amatrix svg {
+pointer-events:none;
+height: 100%;
+}
+.amatrix svg * {
+pointer-events:auto;
 }
 .amatrix .label {
-    font: 9px Tahoma, Verdana;
-    fill: white;
+font: 10px Verdana;
+pointer-events:none;
 }
-.amatrix .label-vert {
-    writing-mode: tb;
+.amatrix .label-selected {
+font-size: 25px;
+fill: white;
+}
+.amatrix .roi {
+cursor: pointer;
 }

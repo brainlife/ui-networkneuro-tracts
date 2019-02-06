@@ -1,64 +1,4 @@
 let debounce_hashupdate;
-
-Vue.component('amatrix',  {
-    props: ["roi_pairs", "labels"],
-    data() {
-        return {
-            columns: [], //list of roi (1001, 1002, etc..) in the order we want to display them in
-            labels: {}, //to lookup label name from roi id
-        }
-    },
-
-    template: `
-        <div class="amatrix">
-            <svg :width="columns.length*10+100" :height="columns.length*10+100">
-                <text v-for="(column, idx) in columns" :x="10*idx+6" :y="0" class="label label-vert">{{labels[column].name}}</text>
-                <text v-for="(column, idx) in columns" :x="columns.length*10" :y="10*idx+107" class="label">{{labels[column].name}}</text>
-                <rect v-for="roi in roi_pairs" 
-                    :x="columns.indexOf(roi.roi2.toString())*10" 
-                    :y="columns.indexOf(roi.roi1.toString())*10+100" 
-                    width="8" height="8" :fill="getcolor(roi)"/>
-            </svg>
-        </div>
-    `,
-    
-    computed: {
-        /*
-        columns() {
-            return ["a", "b", "c"];
-        }
-        */
-    },
-
-    mounted() {
-
-        //create label look up object
-        this.labels = this.labels.reduce((a,c)=>{
-            a[c.label.toString()] = c;
-            return a;
-        }, {});
-
-        //find unique rois
-        let columns = this.roi_pairs.reduce((a,c)=>{
-            let label = this.labels[c.roi1.toString()];
-            a.add(label.label);
-            label = this.labels[c.roi2.toString()];
-            a.add(label.label);
-            return a;
-        }, new Set());
-        this.columns = [...columns].sort();   
-        //console.log(this.columns);
-    },
-
-    methods: {
-        getcolor(roi) {
-            //console.log(roi.roi1.toString());
-            //return roi.weights.count;
-            return "hsl(0, 100%, "+(roi.weights.count*100)+"%)";
-        },
-    }
-})
-
 Vue.component('tractview', {
     props: [ "config" ],
 
@@ -86,9 +26,13 @@ Vue.component('tractview', {
             camera: null,
             controls: null,
 
-            tinyBrainScene: null,
-            tinyBrainCam: null,
-            brainRenderer: null,
+            camera_light: null,
+
+            //tinyBrainScene: null,
+            //tinyBrainCam: null,
+            //brainRenderer: null,
+
+            back_scene: null,
 
             niftis: [],
             selectedNifti: null,
@@ -97,26 +41,27 @@ Vue.component('tractview', {
 
     mounted() {
         this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-        this.brainRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        //this.brainRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
         this.scene = new THREE.Scene();
+        this.back_scene = new THREE.Scene();
 
         // camera
         let viewbox = this.$refs.view.getBoundingClientRect();
-        let tinybrainbox = this.$refs.tinybrain.getBoundingClientRect();
+        //let tinybrainbox = this.$refs.view_tinybrain.getBoundingClientRect();
 
         this.camera = new THREE.PerspectiveCamera(45, viewbox.width / viewbox.height, 1, 5000);
-        this.tinyBrainCam = new THREE.PerspectiveCamera(45, tinybrainbox.width / tinybrainbox.height, 1, 5000);
+        //his.tinyBrainCam = new THREE.PerspectiveCamera(45, tinybrainbox.width / tinybrainbox.height, 1, 5000);
 
         this.camera.position.z = 200;
-
         window.addEventListener("resize", this.resized);
 
+        /*
         // add tiny brain (to show the orientation of the brain while the user looks at fascicles)
-        let loader = new THREE.ObjectLoader();
-
-        loader.load('models/brain.json', _scene => {
+        let objloader = new THREE.ObjectLoader();
+        objloader.load('models/brain.json', _scene => {
             this.tinyBrainScene = _scene;
-            let brainMesh = this.tinyBrainScene.children[1],
+            let brainMesh = this.tinyBrainScene.children[1];
             unnecessaryDirectionalLight = this.tinyBrainScene.children[2];
             // align the tiny brain with the model displaying fascicles
 
@@ -132,9 +77,86 @@ Vue.component('tractview', {
             this.brainlight.radius = 20;
             this.brainlight.position.copy(this.tinyBrainCam.position);
             this.tinyBrainScene.add(this.brainlight);
+
+            //let back_mesh = this.tinyBrainScene.children[1];
+            //this.back_scene.add(amblight);
+            //console.dir(brainMesh);
+            var material = new THREE.LineBasicMaterial({
+                color: new THREE.Color(255,255,255),
+                //transparent: true,
+                //opacity: 0.7,
+                //vertexColors: THREE.VertexColors
+            });
+            let back_brainmesh = new THREE.LineSegments( brainMesh.geometry, material );
+            //back_brainmesh.rotation.z += Math.PI / 2;
+            //this.back_scene.add(back_brainmesh);
+        });
+        */
+
+        // add subtle ambient lighting
+        var ambientLight = new THREE.AmbientLight(0xc0c0c0);
+        this.back_scene.add(ambientLight);
+
+        //var meshMaterial = new THREE.MeshLambertMaterial({color: 0x7777ff, opacity: 0.5, transparent: true});
+        /*
+        var spotLight = new THREE.SpotLight(0xc0c0c0);
+        spotLight.position.set(200, 400, 300);
+        //spotLight.position.set(this.camera.position);
+        this.back_scene.add(spotLight);
+        */
+        this.camera_light = new THREE.PointLight(0xffffff, 1);
+        this.camera_light.radius = 20;
+        //this.camera_light.position.copy(this.tinyBrainCam.position);
+        this.back_scene.add(this.camera_light);
+
+        let material = new THREE.MeshPhongMaterial({
+            color: 0x102017,
+            //transparent: true,
+            side: THREE.DoubleSide,
+            //opacity: 0.5,
+            //colorWrite : false,
+            //vertexColors: THREE.VertexColors,
+            shininess: 10
+        });
+        //let material_cw = material.clone();
+        //material_cw.colorWrite = true;
+
+        let vtkloader = new THREE.VTKLoader();
+        vtkloader.load('testdata/lh.10.vtk', geometry => {
+            //geometry.center();
+            geometry.computeFaceNormals(); //for flat shading
+            geometry.computeVertexNormals(); //for smooth shading
+
+            //let mesh  = THREE.SceneUtils.createMultiMaterialObject(geometry,[material,material_cw] )
+            var mesh = new THREE.Mesh( geometry, material );
+            //mesh.position.set( - 0.075, 0.005, 0 );
+            mesh.rotation.x = -Math.PI/2;
+            //mesh.scale.multiplyScalar( 0.2 );
+            this.back_scene.add( mesh );
+
+            //this.back_scene.add( new THREE.FaceNormalsHelper( mesh ) );
         });
 
-        console.log("starting");
+        vtkloader.load('testdata/rh.10.vtk', geometry => {
+            //geometry.center();
+            geometry.computeVertexNormals();
+
+            /*
+            var material = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(100,200,255),
+                //transparent: true,
+                //opacity: 0.7,
+                //vertexColors: THREE.VertexColors
+            });
+            */
+
+            var mesh = new THREE.Mesh( geometry, material );
+            //mesh.position.set( - 0.075, 0.005, 0 );
+            mesh.rotation.x = -Math.PI/2;
+            //mesh.scale.multiplyScalar( 0.2 );
+            this.back_scene.add( mesh );
+        });
+    
         /*
         // start loading the tract
         let idx = 0;
@@ -149,25 +171,45 @@ Vue.component('tractview', {
             });
         }, console.log);
         */
-        //load roi matrix
-        console.dir(this.config.rois);
+
+        //load fibers
+        //console.dir(this.config.rois);
+        async.eachLimit(this.config.roi_pairs, 3, (pair, next_pair)=>{
+            if(pair.filename == "") return next_pair();
+            pair._url = "testdata/networkneuro/"+pair.filename;
+            this.load_pair(pair, this.meshes.length, (err, mesh) => {
+                if (err) return next_tract(err);
+                
+                //add mesh to the sence!
+                mesh.rotation.x = -Math.PI/2;
+                mesh.visible = false;
+                this.meshes.push(mesh);
+                this.scene.add(mesh);
+
+                this.load_percentage = this.meshes.length / this.config.roi_pairs.length;
+                Vue.set(pair, '_mesh', mesh); //probably I need to do this?
+
+                next_pair();
+            });          
+        });
 
         this.renderer.autoClear = false;
         this.renderer.setSize(viewbox.width, viewbox.height);
-        this.renderer.setClearColor(new THREE.Color(.5,.5,.5));
+        this.renderer.setClearColor(new THREE.Color(.1,.1,.1));
         this.$refs.view.appendChild(this.renderer.domElement);
 
-        this.brainRenderer.autoClear = false;
-        this.brainRenderer.setSize(tinybrainbox.width, tinybrainbox.height);
-        this.$refs.tinybrain.appendChild(this.brainRenderer.domElement);
+        //this.brainRenderer.autoClear = false;
+        //this.brainRenderer.setSize(tinybrainbox.width, tinybrainbox.height);
+        //this.$refs.view_tinybrain.appendChild(this.brainRenderer.domElement);
 
         // use OrbitControls and make camera light follow camera position
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
 
+        /*
         this.handle_hash();
         window.parent.addEventListener("hashchange", e=>{
             this.handle_hash();
-            this.animate_conview();
+            this.render();
         });
 
         this.controls.addEventListener('change', e=>{
@@ -190,11 +232,12 @@ Vue.component('tractview', {
                 window.parent.location.hash = where;
             }, 100);
         });
-
+        */
         this.controls.addEventListener('start', ()=>{
             this.controls.autoRotate = false;
         });
-        this.animate_conview();
+
+        this.render();
         if (this.config.layers) {
             this.config.layers.forEach(layer => {
                 let condensed_filename = layer.url;
@@ -207,6 +250,7 @@ Vue.component('tractview', {
 
     methods: {
 
+        /*
         handle_hash() {
             let info_string = getHashValue('where');
             if (info_string) {
@@ -228,24 +272,29 @@ Vue.component('tractview', {
                 }
             } else this.controls.autoRotate = true;
         },
+        */
 
-        animate_conview: function() {
+        render: function() {
             this.controls.enableKeys = !this.inputFocused();
             this.controls.update();
 
+            this.camera_light.position.copy(this.camera.position);
+
             this.renderer.clear();
             this.renderer.clearDepth();
+            this.renderer.render(this.back_scene, this.camera);
             this.renderer.render(this.scene, this.camera);
 
+            /*
             // handle display of the tiny brain preview
             if (this.tinyBrainScene) {
                 // normalize the main camera's position so that the tiny brain camera is always the same distance away from <0, 0, 0>
                 let pan = this.controls.getPanOffset();
                 let pos3 = new THREE.Vector3(
-                        this.camera.position.x - pan.x,
-                        this.camera.position.y - pan.y,
-                        this.camera.position.z - pan.z
-                        ).normalize();
+                    this.camera.position.x - pan.x,
+                    this.camera.position.y - pan.y,
+                    this.camera.position.z - pan.z
+                ).normalize();
                 this.tinyBrainCam.position.set(pos3.x * 10, pos3.y * 10, pos3.z * 10);
                 this.tinyBrainCam.rotation.copy(this.camera.rotation);
 
@@ -254,14 +303,19 @@ Vue.component('tractview', {
                 this.brainRenderer.clear();
                 this.brainRenderer.render(this.tinyBrainScene, this.tinyBrainCam);
             }
+            */
 
-            requestAnimationFrame(this.animate_conview);
+
+            requestAnimationFrame(this.render);
         },
 
+        /*
         round: function(v) {
             return Math.round(v * 1e3) / 1e3;
         },
+        */
 
+        /*
         tractFocus: function(LR, basename) {
             if (this.load_percentage == 1) {
                 this.focused[basename] = true;
@@ -285,6 +339,7 @@ Vue.component('tractview', {
                 if (LR.right && LR.right.material_previous) LR.right.material = LR.right.material_previous;
             }
         },
+        */
 
         resized: function () {
             var viewbox = this.$refs.view.getBoundingClientRect();
@@ -294,19 +349,21 @@ Vue.component('tractview', {
             this.renderer.setSize(viewbox.width, viewbox.height);
         },
 
-        load_tract: function(tract, index, cb) {
-            fetch(tract.url).then(res=>{
+        load_pair: function(pair, index, cb) {
+            //console.log("loading", pair._url);
+            fetch(pair._url).then(res=>{
                 return res.json();
             }).then(json=>{
-                var bundle = json.coords;
-
+                var coords = json.coords;
                 //convert each bundle to threads_pos array
                 var threads_pos = [];
-                bundle.forEach(function(fascicle) {
-                    if (Array.isArray(fascicle[0])) fascicle = fascicle[0]; //for backward compatibility
-                    var xs = fascicle[0];
-                    var ys = fascicle[1];
-                    var zs = fascicle[2];
+                //if(!coords) console.error("no coords for " ,pair._url);
+                if(!Array.isArray(coords)) coords = [coords];
+                coords.forEach(function(fascicle) {
+                    //if (Array.isArray(fascicle[0])) fascicle = fascicle[0]; //for backward compatibility
+                    var xs = fascicle.x;
+                    var ys = fascicle.y;
+                    var zs = fascicle.z;
                     for(var i = 1;i < xs.length;++i) {
                         threads_pos.push(xs[i-1]);
                         threads_pos.push(ys[i-1]);
@@ -322,17 +379,34 @@ Vue.component('tractview', {
                 var geometry = new THREE.BufferGeometry();
                 geometry.addAttribute('position', new THREE.BufferAttribute(vertices, 3 ) );
                 geometry.vertices = vertices;
-                geometry.tract_index = index;
-                geometry.tract = tract; //metadata..
+                //geometry.tract_index = index;
+                //geometry.tract = pair; //metadata..
 
-                let mesh = this.calculateMesh(geometry);
-                mesh.name = tract.name;
+                /*
+                geometry.colors = [];
+                for ( var i = 0; i < geometry.vertices.length; i+=2 ) {
+                    geometry.colors[ i ] = new THREE.Color( Math.random(), Math.random(), Math.random() );
+                    geometry.colors[ i + 1 ] = geometry.colors[ i ];
+                }
+                */
 
+                var label = this.labels[pair.roi1.toString()];
+                var material = new THREE.LineBasicMaterial({
+                    color: new THREE.Color(label.color.r/256*2, label.color.g/256*2, label.color.b/256*2),
+                    //transparent: true,
+                    //opacity: 0.7,
+                    //vertexColors: THREE.VertexColors
+                    depthTest: false,
+                });
+
+                let mesh = new THREE.LineSegments( geometry, material );
                 cb(null, mesh);
             });
         },
 
-        calculateMesh: function(geometry, mesh) {
+        /*
+        calculateMesh: function(geometry, material) {
+
             if (this.color_map) {
                 var vertexShader = `
                     attribute vec4 color;
@@ -440,48 +514,35 @@ Vue.component('tractview', {
                     return m;
                 }
             }
-
-            var material;
-            if (Array.isArray(geometry.tract.color)) {
-                material = new THREE.LineBasicMaterial({
-                    color: new THREE.Color(geometry.tract.color[0], geometry.tract.color[1], geometry.tract.color[2]),
-                    transparent: true,
-                    opacity: 0.7,
-                });
-            } else {
-                material = new THREE.LineBasicMaterial({
-                    color: new THREE.Color(geometry.tract.color.r, geometry.tract.color.g, geometry.tract.color.b),
-                    transparent: true,
-                    opacity: 0.7,
-                });
-            }
-
-            if (mesh) {
-                mesh.geometry = geometry;
-                mesh.material = material;
-                return mesh;
-            }
-
             var m = new THREE.LineSegments( geometry, material );
-            this.config.tracts[geometry.tract_index].mesh = m;
-
-
+            //this.config.tracts[geometry.tract_index].mesh = m;
             return m;
         },
+        */
 
+        /*
         add_mesh_to_scene: function(mesh) {
             mesh.rotation.x = -Math.PI/2;
             this.meshes.push(mesh);
             this.scene.add(mesh);
         },
+        */
 
+        /*
         recalculateMaterials: function() {
             this.hist = [];
             this.meshes.forEach(mesh => {
-                this.calculateMesh(mesh.geometry, mesh);
+                var material = new THREE.LineBasicMaterial({
+                    color: new THREE.Color(geometry.tract.color.r, geometry.tract.color.g, geometry.tract.color.b),
+                    transparent: true,
+                    opacity: 0.7,
+                });
+                this.calculateMesh(mesh.geometry, material, mesh);
             });
         },
+        */
 
+        /*
         destroyPlot: function() {
             Plotly.purge(this.$refs.hist);
             this.$refs.hist.style.display = "none";
@@ -530,7 +591,8 @@ Vue.component('tractview', {
             });
             reader.readAsArrayBuffer(file);
         },
-
+        */
+        /*
         niftiSelectChanged: function() {
             if (this.selectedNifti === null) {
                 this.color_map = undefined;
@@ -549,11 +611,13 @@ Vue.component('tractview', {
                 }
             }
         },
+        */
 
         showAll: function() {
             this.meshes.forEach(m => m.visible = true);
         },
 
+        /*
         processDeflatedNiftiBuffer: function(buffer) {
             var raw = pako.inflate(buffer);
             var N = nifti.parse(raw);
@@ -595,6 +659,7 @@ Vue.component('tractview', {
             this.makePlot();
             this.showAll();
         },
+        */
 
         inputFocused: function() {
             let result = false;
@@ -612,6 +677,16 @@ Vue.component('tractview', {
     },
 
     computed: {
+
+        //create label look up object
+        labels: function() {
+            return this.config.labels.reduce((a,c)=>{
+                a[c.label.toString()] = c;
+                return a;
+            }, {});
+        },
+
+        /*
         sortedMeshes: function() {
             let out = {};
             this.meshes.map(m=>m).sort((_a, _b) => {
@@ -641,9 +716,11 @@ Vue.component('tractview', {
 
             return out;
         }
+        */
     },
 
     watch: {
+        /*
         all_left: function() {
             this.meshes.forEach(m => {
                 if (!isRightTract(m.name)) m.visible = this.all_left;
@@ -655,61 +732,17 @@ Vue.component('tractview', {
                 if (isRightTract(m.name)) m.visible = this.all_right;
             });
         },
+        */
     },
 
     template: `
     <div class="container" style="display:inline-block;">
          <div ref="style" scoped></div>
          <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;"></div>
-         <div id="tinybrain" class="tinybrain" style="width:100px;height:100px;" ref="tinybrain"></div>
+         <!--<div id="tinybrain" class="tinybrain" style="width:100px;height:100px;" ref="view_tinybrain"></div>-->
          <div v-if="load_percentage < 1" id="loading" class="loading">Loading... ({{Math.round(load_percentage*100)}}%)</div>
          <a id="bllogo" class="bllogo" href="https://brainlife.io">brainlife</a>
-
          <amatrix :roi_pairs="config.roi_pairs" :labels="config.labels"/>
-         <!--
-         <div v-if="sortedMeshes" class='show_hide_button' @click="visible = !visible">&#9776;</div>
-         <div id="controls" class="controls" :class="{'controls-hidden': !visible}">
-           <div v-if='controls'>
-              <input type="checkbox" name="enableRotation" v-model="controls.autoRotate" /> Rotate
-           </div>
-           <table class="tract_toggles" id="tract_toggles">
-              <tr class="row">
-                 <td class='label'><b>Tracts</b></td>
-                 <td class='label'><b>L</b></td>
-                 <td class='label'><b>R</b></td>
-              </tr>
-              <tr class='row'>
-                 <td class='label'><label>All</label></td>
-                 <td class='label'><input type='checkbox' v-model='all_left' /></td>
-                 <td class='label'><input type='checkbox' v-model='all_right' /></td>
-              </tr>
-              <tr class="row">
-                 <td colspan="3" style="padding-top: 5px; margin-bottom: 5px; border-bottom: 1px solid gray;"></td>
-              </tr>
-              <tr v-for="(LR, basename) in sortedMeshes" class='row' @mouseenter="tractFocus(LR, basename)" @mouseleave="tractUnfocus(LR, basename)">
-                 <td class='label'><label>{{basename}}</label></td>
-                 <td class='label'><input v-if="LR.left && load_percentage == 1" type='checkbox' :name='LR.left.name' v-model='LR.left.visible' /></td>
-                 <td class='label'><input v-if="LR.right && load_percentage == 1" type='checkbox' :name='LR.right.name' v-model='LR.right.visible' /></td>
-              </tr>
-           </table>
-           <!-- Nifti Choosing -->
-           <div class="nifti_chooser" style="display:inline-block; max-width:300px; margin-top:5px;">
-              <div style="display:inline-block;" v-if="niftis.length > 0">
-                 <label style="color:#ccc; width: 120px;">Overlay</label> 
-                 <select id="nifti_select" class="nifti_select" ref="upload_input" @change="niftiSelectChanged" v-model="selectedNifti">
-                    <option :value="null">(No Overlay)</option>
-                    <option v-for="(n, i) in niftis" :value="i">{{n.filename}}</option>
-                 </select>
-              </div>
-              <br />
-              <div class="upload_div">
-                 <label for="upload_nifti">Upload Overlay Image (.nii.gz)</label>
-                 <input type="file" style="visibility:hidden;max-height:0;max-width:5px;" name="upload_nifti" id="upload_nifti" @change="upload_file"></input>
-              </div>
-              <div class="plots" id="plots" ref="hist"></div>
-            </div>
-          </div>
-          -->
     </div>            
     `
 })

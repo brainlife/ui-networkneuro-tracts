@@ -26,9 +26,12 @@
 
 	<!-- Main Scripts -->
 	<script type="text/javascript" src="lib/dist.bundled.js"></script>
-	<script type="text/javascript" src="lib/stats.js"></script>
-	<script type="text/javascript" src="tractview.js"></script>
-	<!--<script type="text/javascript" src="testdata/config.js"></script>-->
+    <script type="text/javascript" src="lib/stats.js"></script>
+    
+    <script type="text/javascript" src="components/tractview.js"></script>
+    <script type="text/javascript" src="components/amatrix.js"></script>
+    
+    <!--<script type="text/javascript" src="testdata/config.js"></script>-->
     <script type="text/javascript" src="labels.js"></script>
     <script type="text/javascript" src="testdata/networkneuro/index.js"></script>
 	<script>
@@ -43,22 +46,27 @@
             tract.url += "&at="+jwt;
         });
         */
-        const config = { labels, roi_pairs };
-   
-        console.dir(config);
-        
-        new Vue({
-            el: '#tractview',
-            data: function() {
-                return {
-                    error: null,
-                    config,
+
+        console.log("testdata index.json");
+        fetch("testdata/networkneuro/index.json").then(res=>{
+            return res.json();
+        }).then(json=>{
+            const config = { labels, roi_pairs: json.roi_pairs };
+            //console.dir(config);
+            
+            new Vue({
+                el: '#tractview',
+                data: function() {
+                    return {
+                        error: null,
+                        config,
+                    }
+                },
+                components: ['tractview'],
+                created() {
+                    if (!Detector.webgl) this.error = "Your browser does not support WebGL, so the TractViewer is unable to be initiated.";
                 }
-            },
-            components: ['tractview'],
-            created() {
-                if (!Detector.webgl) this.error = "Your browser does not support WebGL, so the TractViewer is unable to be initiated.";
-            }
+            });
         });
 	</script>
 </body>

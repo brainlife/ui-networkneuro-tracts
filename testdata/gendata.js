@@ -32,19 +32,21 @@ const fs = require('fs');
 ]
 */
 
-function gen_fiber() {
-    let fiber = [];
+function gen_fiber(source, direction) {
+    let fiber = {};
     for(let i = 0;i < 3;++i) {
         let coords = [];
-        let v = Math.random()*20-10;
-        let dv = Math.random()-0.5;
-        let ddv = (Math.random()-0.5)/10;
+        let v = source[i]; 
+        let dv = direction[i];
+        let ddv = (Math.random()-0.5)/100;
         for(let x = 0;x < 40;++x) {
             v += dv;
             dv += ddv;
             coords.push(v);
         }
-        fiber.push(coords);
+        if(i == 0) fiber.x = coords;
+        if(i == 1) fiber.y = coords;
+        if(i == 2) fiber.z = coords;
     }
     return fiber;
 }
@@ -77,9 +79,13 @@ for(let a = 0; a < columns.length;a++) {
             filename,
         });        
 
+        let source = [Math.random()*20-20, Math.random()*20-20, Math.random()*20-20];
+        let direction = [Math.random()-0.5, Math.random()-0.5, Math.random()-0.5];
+
+        //Math.random()*20-10;
         let coords = [];
         for(let i = 0;i < 100;++i) {
-            coords.push(gen_fiber());
+            coords.push(gen_fiber(source, direction));
         }
         fs.writeFileSync("networkneuro/"+filename, JSON.stringify({coords}, null, 4));
     }
