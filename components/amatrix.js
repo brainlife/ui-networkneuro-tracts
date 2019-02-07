@@ -1,5 +1,5 @@
 Vue.component('amatrix',  {
-    props: ["roi_pairs", "labels"],
+    props: ["roi_pairs", "labels", "hovered_roi"],
     data() {
         return {
             columns: [], //list of roi (1001, 1002, etc..) in the order we want to display them in
@@ -15,7 +15,7 @@ Vue.component('amatrix',  {
             <svg> 
                 <g transform="rotate(90 0 0)">
                     <text v-for="(column, idx) in columns" :x="9*idx+610" :y="9*idx-400" text-anchor="end"
-                        class="label" :class="{'label-selected':hovered_roi1 == column || hovered_roi2 == column}" 
+                        class="label" :class="{'label-selected':hovered_roi1 == column || hovered_roi2 == column || hovered_roi == column}" 
                         :transform="'rotate(-45 '+(9*idx+7)+' '+(9*idx+98)+')'" :fill="getroicolor(column)">{{labels_o[column].name}}</text>
                     <!--
                     <text v-for="(column, idx) in columns" :x="columns.length*9+3" :y="9*idx+107" 
@@ -53,7 +53,8 @@ Vue.component('amatrix',  {
                 rois.add(pair.roi1);
                 rois.add(pair.roi2);
             });
-            //console.dir(rois);
+            //console.log("selected_rois");
+            //console.log(rois);
             return rois;
         }
     },
@@ -87,39 +88,55 @@ Vue.component('amatrix',  {
 
     methods: {
         getcolor(pair) {
-            let h = 180;
-            let s = 80;
+            let h = 0;
+            let s = 0;
+            let l = 30;
+            let a = Math.max(Math.log(pair.weights.count)/4, 0);
+
+            /*
             let l = Math.log(pair.weights.count)*10;
             let a = 0.2;
             if(pair._mesh) a = 0.7;          
             if(pair._mesh && pair._mesh.visible) a = 1.0;
+            */
+            if(pair._mesh) l = 90;
+            //if(pair._mesh && pair._mesh.visible) l = 100;
 
             if(pair._selected) {
-                h=0;
-                l = Math.max(l, 40);
-                a = Math.max(l, 0.4);
-            } else if(pair.roi1 == this.hovered_roi1) {
-                let label = this.labels_o[this.hovered_roi1];
+                //h=0;
+                //l = Math.max(l, 40);
+                //a = Math.max(l, 0.4);
+                s = 100; //maybe I should use weights for this to show the original weight?
+                l = 50;
+                a = 1.0;
+            } else if(pair.roi1 == this.hovered_roi1 && pair.roi2 == this.hovered_roi2) {
+                h = 30;
+                s = 100;
+                l = 50;
+                a = 1;
+                //a = Math.max(a, 0.5);   
+            } else if(pair.roi1 == this.hovered_roi1 || pair.roi2 == this.hovered_roi2) {
+                
+                //get roi color
+                let label;
+                if(pair.roi1 == this.hovered_roi1) label = this.labels_o[this.hovered_roi1];
+                if(pair.roi2 == this.hovered_roi2) label = this.labels_o[this.hovered_roi2];
                 let c = new THREE.Color("rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")");
+
+                //massage it a bit
                 let hsl = {h, s, l};
                 c.getHSL(hsl);
                 h = hsl.h*360;
                 l = hsl.l*100;
-            } else if(pair.roi2 == this.hovered_roi2) {
-                /*
-                h = 270;
-                l = Math.max(l, 70);
-                */
-               let label = this.labels_o[this.hovered_roi2];
-               let c = new THREE.Color("rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")");
-               let hsl = {h, s, l};
-               c.getHSL(hsl);
-               h = hsl.h*360;
-               l = hsl.l*100;
-               //a = Math.max(l, 0.4);
+                s = 50;
+                a = Math.max(a, 0.3);      
             }
 
+            /*
+            s = Math.max(s, 0);
             l = Math.max(l, 0);
+            a = Math.max(a, 0);
+            */
             
             return "hsla("+h+", "+s+"%, "+l+"%, "+a+")";
         },
@@ -134,6 +151,8 @@ Vue.component('amatrix',  {
             this.hovered_roi2 = pair.roi2;
             this.change_vis(pair.roi1, true);
             this.change_vis(pair.roi2, true);
+
+            this.$emit("hover", pair);
         },
 
         mouseleave(pair) {
@@ -142,6 +161,8 @@ Vue.component('amatrix',  {
             this.hovered_roi2 = null;
             this.change_vis(pair.roi1, this.selected_rois.has(pair.roi1));
             this.change_vis(pair.roi2, this.selected_rois.has(pair.roi2));
+
+            this.$emit("leave");
         },
 
         change_vis(roi, vis) {
@@ -151,8 +172,8 @@ Vue.component('amatrix',  {
         
         click(pair) {
             pair._selected = !pair._selected;
-            this.change_vis(pair.roi1, this.selected_rois.has(pair.roi1));
-            this.change_vis(pair.roi2, this.selected_rois.has(pair.roi2));
+            this.change_vis(pair.roi1, this.selected_rois.has(pair.roi1)||this.hovered_roi1 == pair.roi1);
+            this.change_vis(pair.roi2, this.selected_rois.has(pair.roi2)||this.hovered_roi2 == pair.roi2);
         },
     }
 })

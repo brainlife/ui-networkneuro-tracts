@@ -30,8 +30,15 @@ Vue.component('tractview', {
             camera_light: null,
             back_scene: null,
 
-            niftis: [],
-            selectedNifti: null,
+            //niftis: [],
+            //selectedNifti: null,
+            roi1_pointer: null,
+            roi2_pointer: null,
+
+            hoverpair: null, //roi pair hovered on amatrix
+            hovered_roi: null, //roi mesh hovered on tractview
+
+            raycaster: new THREE.Raycaster(),
         };
     },
 
@@ -85,6 +92,9 @@ Vue.component('tractview', {
         */
     
         //load fibers
+        let tracts = new THREE.Object3D();
+        tracts.id = "tracts";
+        this.scene.add(tracts);
         async.eachLimit(this.config.roi_pairs, 3, (pair, next_pair)=>{
             if(pair.filename == "") return next_pair();
             pair._url = "testdata/networkneuro/"+pair.filename;
@@ -93,7 +103,7 @@ Vue.component('tractview', {
                 mesh.rotation.x = -Math.PI/2;
                 mesh.visible = false;
                 this.meshes.push(mesh);
-                this.scene.add(mesh);
+                tracts.add(mesh);
                 this.load_percentage = this.meshes.length / this.config.roi_pairs.length;
                 Vue.set(pair, '_mesh', mesh); //probably I need to do this?
                 next_pair();
@@ -109,61 +119,34 @@ Vue.component('tractview', {
             let vtk = "testdata/decimate/ctx-"+tokens[0]+"h-"+tokens[1]+".vtk";
 
             vtkloader.load(vtk, geometry => {
-                //geometry.computeFaceNormals(); //for flat shading
-                geometry.computeVertexNormals(); //for smooth shading
-                //var mesh = new THREE.Mesh( geometry, material );
-                //mesh.rotation.x = -Math.PI/2;
-                //this.back_scene.add( mesh );
-                //console.log(vtk, geometry);
-                //let back_material = new THREE.MeshLambertMaterial({
-                //let roi_material = new THREE.MeshPhongMaterial({
                 let back_material = new THREE.MeshBasicMaterial({
-                    //color: new THREE.Color(label.color.r/256, label.color.g/256, label.color.b/256),
                     color: new THREE.Color(0,0,0),
-                    //transparent: true,
-                    //side: THREE.DoubleSide,
-                    //opacity: 0.1,
-                    //colorWrite : false,
-                    //vertexColors: THREE.VertexColors,
-                    //shininess: 10,
-                    //shading: THREE.SmoothShading,
-                    //depthTest: false,
+                    depthTest: false,
                 });
                 var back_mesh = new THREE.Mesh( geometry, back_material );
                 back_mesh.rotation.x = -Math.PI/2;
                 this.back_scene.add(back_mesh);
 
                 let roi_material = new THREE.MeshLambertMaterial({
-                //let roi_material = new THREE.MeshPhongMaterial({
-                //let roi_material = new THREE.MeshBasicMaterial({
                     color: new THREE.Color(label.color.r/256, label.color.g/256, label.color.b/256),
-                    //transparent: true,
-                    //side: THREE.DoubleSide,
-                    //opacity: 0.1,
-                    //colorWrite : false,
-                    //vertexColors: THREE.VertexColors,
-                    //shininess: 10,
-                    //shading: THREE.SmoothShading,
-                    //depthTest: false,
+
                 });
+                geometry.computeVertexNormals(); //for smooth shading
                 var mesh = new THREE.Mesh( geometry, roi_material );
                 mesh.rotation.x = -Math.PI/2;
                 mesh.visible = false;
+                mesh._roi = label.label;
                 this.scene.add(mesh);
                 label._mesh = mesh;
                 label._material = roi_material;
-                /*
-                label._selected_material = new THREE.MeshPhongMaterial({
-                    color: new THREE.Color(label.color.r/256/2, label.color.g/256/2, label.color.b/256/2),
-                    transparent: true,
-                    side: THREE.DoubleSide,
-                    opacity: 0.2,
-                    shininess: 10,
-                    depthTest: false,
-                });
-                */
 
-                //console.log(vtk,mesh);
+                //calculate mesh center
+                geometry.computeBoundingBox();
+                var center = new THREE.Vector3();
+                geometry.boundingBox.getCenter(center);
+                mesh.localToWorld( center );
+                label._position = center;
+
                 next_label();
             }, progress=>{}, err=>{
                 //console.error(err);
@@ -171,11 +154,26 @@ Vue.component('tractview', {
             })
         });
 
+        //create pointers
+        var geometry = new THREE.Geometry();
+        var material = new THREE.LineBasicMaterial( { color : 0xff0000 } );
+
+        this.roi1_pointer = new THREE.Line( geometry, material );
+        this.roi1_pointer.rotation.x = -Math.PI/2;
+        this.roi1_pointer.visible = false;
+        this.scene.add(this.roi1_pointer);
+        
+        this.roi2_pointer = new THREE.Line( geometry, material );
+        this.roi2_pointer.rotation.x = -Math.PI/2;
+        this.roi2_pointer.visible = false;
+        this.scene.add(this.roi2_pointer);
+
         this.renderer.autoClear = false;
         this.renderer.setSize(viewbox.width, viewbox.height);
         this.renderer.setClearColor(new THREE.Color(.1,.1,.1));
         this.$refs.view.appendChild(this.renderer.domElement);
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.autoRotate = true;
 
         this.controls.addEventListener('start', ()=>{
             this.controls.autoRotate = false;
@@ -184,6 +182,7 @@ Vue.component('tractview', {
         window.addEventListener("resize", this.resized);
 
         this.render();
+        /*
         if (this.config.layers) {
             this.config.layers.forEach(layer => {
                 let condensed_filename = layer.url;
@@ -192,13 +191,19 @@ Vue.component('tractview', {
             });
             this.selectedNifti = null;
         }
+        */
     },
 
     methods: {
-        render: function() {
-            this.controls.enableKeys = !this.inputFocused();
+        render() {
+            //animate
+            //this.controls.enableKeys = !this.inputFocused();
             this.controls.update();
             this.camera_light.position.copy(this.camera.position);
+
+            this.update_pointers();
+
+            //render
             this.renderer.clear();
             this.renderer.render(this.back_scene, this.camera);
             this.renderer.clearDepth();
@@ -207,7 +212,40 @@ Vue.component('tractview', {
             requestAnimationFrame(this.render);
         },
 
-        resized: function () {
+        update_pointers() {
+            if(!this.hoverpair) {
+                //this.roi1_pointer.visible = false;
+                //this.roi2_pointer.visible = false;
+                return;
+            }
+
+            var label = this.labels[this.hoverpair.roi1.toString()];
+            if(label._mesh) {
+
+                /*
+                //create new geometry
+                var pos1 = new THREE.Vector3( 0.3, 0, 0.5 );
+                pos1.unproject(this.camrea);
+                //pos1.applyAxisAngle( new THREE.Vector3( 1, 0, 0 ), Math.PI/2 );
+                var pos2 = new THREE.Vector3( 0.2, 0.5, 0 );
+                pos2.unproject(this.camera);
+                //pos2.applyAxisAngle( new THREE.Vector3( 1, 0, 0 ), Math.PI/2 );
+                var pos3 = new THREE.Vector3( 0, 0.25, 0 );
+                pos3.unproject(this.camera)
+                //pos3.applyAxisAngle( new THREE.Vector3( 1, 0, 0 ), Math.PI/2 );
+                var curve = new THREE.CubicBezierCurve3(
+                    label._position, pos3, pos2, pos1,
+                );
+                this.roi1_pointer.geometry.vertices = curve.getPoints(10);
+                this.roi1_pointer.geometry.verticesNeedUpdate = true;
+                    
+                this.roi1_pointer.visible = true;
+                //this.roi2_pointer.visible = true;
+                */
+            }
+        },
+
+        resized() {
             var viewbox = this.$refs.view.getBoundingClientRect();
 
             this.camera.aspect = viewbox.width / viewbox.height;
@@ -215,7 +253,7 @@ Vue.component('tractview', {
             this.renderer.setSize(viewbox.width, viewbox.height);
         },
 
-        load_pair: function(pair, index, cb) {
+        load_pair(pair, index, cb) {
             fetch(pair._url).then(res=>{
                 return res.json();
             }).then(json=>{
@@ -257,7 +295,8 @@ Vue.component('tractview', {
             });
         },
 
-        showAll: function() {
+        /*
+        showAll() {
             this.meshes.forEach(m => m.visible = true);
         },
 
@@ -266,6 +305,29 @@ Vue.component('tractview', {
             Object.keys(this.$refs).forEach(k => result = result || (document.activeElement == this.$refs[k]) );
             return result;
         },
+        */
+        update_hoverpair(pair) {
+            this.hoverpair = pair;
+        },
+
+        mousemove(event) {
+            var mouse = new THREE.Vector2();
+            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+            this.raycaster.setFromCamera( mouse, this.camera );
+            var intersects = this.raycaster.intersectObjects( this.scene.children );
+            //find the first non-tracts mesh
+
+            this.hovered_roi = null;
+            //find the first roi
+            for(let i = 0;i < intersects.length; ++i) {
+                //console.log(intersects[i].object._type);
+                if(intersects[i].object._roi) {
+                    this.hovered_roi = intersects[i].object._roi;
+                    break;
+                }
+            }
+        }
     },
 
     computed: {
@@ -299,13 +361,14 @@ Vue.component('tractview', {
     template: `
     <div class="container" style="display:inline-block;">
          <div ref="style" scoped></div>
-         <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;"></div>
+         <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove"></div>
          <div v-if="load_percentage < 1" id="loading" class="status">
             <span v-if="load_percentage < 1">Loading .. {{Math.round(load_percentage*100)}}%</span>
             <span v-else>Network Neuro <b>&middot; Brent McPherson</b></span>
+            <small v-if="hoverpair">{{hoverpair.weights}}</small>
          </div>
          <a id="bllogo" class="bllogo" href="https://brainlife.io">brainlife</a>
-         <amatrix :roi_pairs="config.roi_pairs" :labels="config.labels"/>
+         <amatrix :roi_pairs="config.roi_pairs" :labels="config.labels" :hovered_roi="hovered_roi" @hover="update_hoverpair" @leave="hoverpair = null"/>
          <div class="controls" v-if="controls">
             <input type="checkbox" name="enableRotation" v-model="controls.autoRotate" /> Rotate
          </div>
