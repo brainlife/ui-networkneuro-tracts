@@ -247,7 +247,7 @@ Vue.component('tractview', {
                 var material = new THREE.LineBasicMaterial({
                     color: new THREE.Color(label.color.r/256*3, label.color.g/256*3, label.color.b/256*3),
                     transparent: true,
-                    opacity: 0.7,
+                    opacity: 0.6,
                     //vertexColors: THREE.VertexColors
                     //depthTest: false,
                 });

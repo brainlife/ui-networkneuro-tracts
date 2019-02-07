@@ -12,19 +12,19 @@ Vue.component('amatrix',  {
 
     template: `
         <div class="amatrix">
-            <svg :width="columns.length*9+100"> 
-                <g transform="rotate(45 50 100)">
-                    <text v-for="(column, idx) in columns" :x="9*idx+10" :y="98" 
-                        class="label" :class="{'label-selected':hovered_roi2 == column}" 
-                        :transform="'rotate(-90 '+(9*idx+7)+' 98)'" :fill="getroicolor(column)">{{labels_o[column].name}}</text>
+            <svg> 
+                <g transform="rotate(90 0 0)">
+                    <text v-for="(column, idx) in columns" :x="9*idx+610" :y="9*idx-400" text-anchor="end"
+                        class="label" :class="{'label-selected':hovered_roi1 == column || hovered_roi2 == column}" 
+                        :transform="'rotate(-45 '+(9*idx+7)+' '+(9*idx+98)+')'" :fill="getroicolor(column)">{{labels_o[column].name}}</text>
+                    <!--
                     <text v-for="(column, idx) in columns" :x="columns.length*9+3" :y="9*idx+107" 
                         class="label" :class="{'label-selected':hovered_roi1 == column}" 
                         :fill="getroicolor(column)">{{labels_o[column].name}}</text>
-
-                    <rect v-for="pair in roi_pairs"
-                        class="roi"
-                        :x="columns.indexOf(pair.roi2.toString())*9" 
-                        :y="columns.indexOf(pair.roi1.toString())*9+100" 
+                    -->
+                    <rect v-for="pair in roi_pairs" class="roi"
+                        :x="columns.indexOf(pair.roi2.toString())*9+80" 
+                        :y="columns.indexOf(pair.roi1.toString())*9-690" 
                         width="8" height="8" 
                         :fill="getcolor(pair)"
                         @mouseover="mouseover(pair)"
@@ -53,7 +53,7 @@ Vue.component('amatrix',  {
                 rois.add(pair.roi1);
                 rois.add(pair.roi2);
             });
-            console.dir(rois);
+            //console.dir(rois);
             return rois;
         }
     },
@@ -88,18 +88,45 @@ Vue.component('amatrix',  {
     methods: {
         getcolor(pair) {
             let h = 180;
-            if(pair._selected) h=0;
             let s = 80;
             let l = Math.log(pair.weights.count)*10;
             let a = 0.2;
-            if(pair._mesh) a = 0.8;          
+            if(pair._mesh) a = 0.7;          
             if(pair._mesh && pair._mesh.visible) a = 1.0;
+
+            if(pair._selected) {
+                h=0;
+                l = Math.max(l, 40);
+                a = Math.max(l, 0.4);
+            } else if(pair.roi1 == this.hovered_roi1) {
+                let label = this.labels_o[this.hovered_roi1];
+                let c = new THREE.Color("rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")");
+                let hsl = {h, s, l};
+                c.getHSL(hsl);
+                h = hsl.h*360;
+                l = hsl.l*100;
+            } else if(pair.roi2 == this.hovered_roi2) {
+                /*
+                h = 270;
+                l = Math.max(l, 70);
+                */
+               let label = this.labels_o[this.hovered_roi2];
+               let c = new THREE.Color("rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")");
+               let hsl = {h, s, l};
+               c.getHSL(hsl);
+               h = hsl.h*360;
+               l = hsl.l*100;
+               //a = Math.max(l, 0.4);
+            }
+
+            l = Math.max(l, 0);
+            
             return "hsla("+h+", "+s+"%, "+l+"%, "+a+")";
         },
 
-        getroicolor(pair) {
-            let label = this.labels_o[pair];
-            return "rgb("+label.color.r+","+label.color.g+","+label.color.b+")";
+        getroicolor(column) {
+            let label = this.labels_o[column];
+            return "rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")";
         },
         mouseover(pair) {
             if(pair._mesh) pair._mesh.visible = true;
