@@ -78,6 +78,8 @@ Vue.component('amatrix',  {
             let v = roi.weights.count;
             if(v < min || min === null) min = v;
             if(v > max || max === null) max = v;
+
+            roi._selected = false;
         });
         console.log("min", min);
         console.log("max", max);
