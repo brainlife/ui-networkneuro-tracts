@@ -1,6 +1,6 @@
 let debounce_hashupdate;
 
-Vue.component('tractview', {
+Vue.component('nnview', {
     props: [ "config" ],
 
     data () {
@@ -36,7 +36,7 @@ Vue.component('tractview', {
             roi2_pointer: null,
 
             hoverpair: null, //roi pair hovered on amatrix
-            hovered_roi: null, //roi mesh hovered on tractview
+            hovered_roi: null, //roi mesh hovered on nnview
 
             raycaster: new THREE.Raycaster(),
         };
