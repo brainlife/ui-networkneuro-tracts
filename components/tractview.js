@@ -45,27 +45,30 @@ Vue.component('tractview', {
         this.camera = new THREE.PerspectiveCamera(45, viewbox.width / viewbox.height, 1, 5000);
         this.camera.position.z = 200;
         
-        var ambientLight = new THREE.AmbientLight(0xc0c0c0);
-        this.back_scene.add(ambientLight);
+        var ambientLight = new THREE.AmbientLight(0x303030);
+        this.scene.add(ambientLight);
 
         this.camera_light = new THREE.PointLight(0xffffff, 1);
-        this.camera_light.radius = 20;
-        this.back_scene.add(this.camera_light);
+        this.camera_light.radius = 10;
+        this.scene.add(this.camera_light);
 
+        /*
         let material = new THREE.MeshPhongMaterial({
             color: 0x102017,
             //transparent: true,
-            side: THREE.DoubleSide,
+            //side: THREE.DoubleSide,
             //opacity: 0.5,
             //colorWrite : false,
             //vertexColors: THREE.VertexColors,
-            shininess: 10
+            //shininess: 30
         });
+        */
 
         let vtkloader = new THREE.VTKLoader();
+        /*
         vtkloader.load('testdata/lh.10.vtk', geometry => {
             //geometry.center();
-            geometry.computeFaceNormals(); //for flat shading
+            //geometry.computeFaceNormals(); //for flat shading
             geometry.computeVertexNormals(); //for smooth shading
 
             //let mesh  = THREE.SceneUtils.createMultiMaterialObject(geometry,[material,material_cw] )
@@ -79,6 +82,7 @@ Vue.component('tractview', {
             mesh.rotation.x = -Math.PI/2;
             this.back_scene.add( mesh );
         });
+        */
     
         //load fibers
         async.eachLimit(this.config.roi_pairs, 3, (pair, next_pair)=>{
@@ -96,6 +100,77 @@ Vue.component('tractview', {
             });          
         });
 
+        //load roi vtk
+        async.eachLimit(this.labels, 1, (label, next_label)=>{
+            let id = parseInt(label.label);
+            if(id < 1000 || id > 2035) return next_label();
+
+            let tokens = label.name.split("-");
+            let vtk = "testdata/decimate/ctx-"+tokens[0]+"h-"+tokens[1]+".vtk";
+
+            vtkloader.load(vtk, geometry => {
+                //geometry.computeFaceNormals(); //for flat shading
+                geometry.computeVertexNormals(); //for smooth shading
+                //var mesh = new THREE.Mesh( geometry, material );
+                //mesh.rotation.x = -Math.PI/2;
+                //this.back_scene.add( mesh );
+                //console.log(vtk, geometry);
+                //let back_material = new THREE.MeshLambertMaterial({
+                //let roi_material = new THREE.MeshPhongMaterial({
+                let back_material = new THREE.MeshBasicMaterial({
+                    //color: new THREE.Color(label.color.r/256, label.color.g/256, label.color.b/256),
+                    color: new THREE.Color(0,0,0),
+                    //transparent: true,
+                    //side: THREE.DoubleSide,
+                    //opacity: 0.1,
+                    //colorWrite : false,
+                    //vertexColors: THREE.VertexColors,
+                    //shininess: 10,
+                    //shading: THREE.SmoothShading,
+                    //depthTest: false,
+                });
+                var back_mesh = new THREE.Mesh( geometry, back_material );
+                back_mesh.rotation.x = -Math.PI/2;
+                this.back_scene.add(back_mesh);
+
+                let roi_material = new THREE.MeshLambertMaterial({
+                //let roi_material = new THREE.MeshPhongMaterial({
+                //let roi_material = new THREE.MeshBasicMaterial({
+                    color: new THREE.Color(label.color.r/256, label.color.g/256, label.color.b/256),
+                    //transparent: true,
+                    //side: THREE.DoubleSide,
+                    //opacity: 0.1,
+                    //colorWrite : false,
+                    //vertexColors: THREE.VertexColors,
+                    //shininess: 10,
+                    //shading: THREE.SmoothShading,
+                    //depthTest: false,
+                });
+                var mesh = new THREE.Mesh( geometry, roi_material );
+                mesh.rotation.x = -Math.PI/2;
+                mesh.visible = false;
+                this.scene.add(mesh);
+                label._mesh = mesh;
+                label._material = roi_material;
+                /*
+                label._selected_material = new THREE.MeshPhongMaterial({
+                    color: new THREE.Color(label.color.r/256/2, label.color.g/256/2, label.color.b/256/2),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    opacity: 0.2,
+                    shininess: 10,
+                    depthTest: false,
+                });
+                */
+
+                //console.log(vtk,mesh);
+                next_label();
+            }, progress=>{}, err=>{
+                //console.error(err);
+                next_label();
+            })
+        });
+
         this.renderer.autoClear = false;
         this.renderer.setSize(viewbox.width, viewbox.height);
         this.renderer.setClearColor(new THREE.Color(.1,.1,.1));
@@ -105,6 +180,7 @@ Vue.component('tractview', {
         this.controls.addEventListener('start', ()=>{
             this.controls.autoRotate = false;
         });
+
         window.addEventListener("resize", this.resized);
 
         this.render();
@@ -169,7 +245,7 @@ Vue.component('tractview', {
 
                 var label = this.labels[pair.roi1.toString()];
                 var material = new THREE.LineBasicMaterial({
-                    color: new THREE.Color(label.color.r/256*2, label.color.g/256*2, label.color.b/256*2),
+                    color: new THREE.Color(label.color.r/256*3, label.color.g/256*3, label.color.b/256*3),
                     transparent: true,
                     opacity: 0.7,
                     //vertexColors: THREE.VertexColors
@@ -224,10 +300,15 @@ Vue.component('tractview', {
     <div class="container" style="display:inline-block;">
          <div ref="style" scoped></div>
          <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;"></div>
-         <!--<div id="tinybrain" class="tinybrain" style="width:100px;height:100px;" ref="view_tinybrain"></div>-->
-         <div v-if="load_percentage < 1" id="loading" class="loading">Loading... ({{Math.round(load_percentage*100)}}%)</div>
+         <div v-if="load_percentage < 1" id="loading" class="status">
+            <span v-if="load_percentage < 1">Loading .. {{Math.round(load_percentage*100)}}%</span>
+            <span v-else>Network Neuro <b>&middot; Brent McPherson</b></span>
+         </div>
          <a id="bllogo" class="bllogo" href="https://brainlife.io">brainlife</a>
          <amatrix :roi_pairs="config.roi_pairs" :labels="config.labels"/>
+         <div class="controls" v-if="controls">
+            <input type="checkbox" name="enableRotation" v-model="controls.autoRotate" /> Rotate
+         </div>
     </div>            
     `
 })

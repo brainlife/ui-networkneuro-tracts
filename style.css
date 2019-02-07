@@ -154,10 +154,10 @@ color:white;
 text-decoration:none;
 }
 
-.loading {
+.status {
 position: absolute;
 bottom:15px;
-right: 100px;
+right: 15px;
 font-size: 16px;
 opacity:.2;
 color:white;
