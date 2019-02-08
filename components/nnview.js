@@ -1,4 +1,4 @@
-let debounce_hashupdate;
+let last_mouseover;
 
 Vue.component('nnview', {
     data () {
@@ -159,6 +159,7 @@ Vue.component('nnview', {
                 }, new Set());
                 this.columns = [...columns].sort();   
 
+                /*
                 //find min/max value
                 let min = null;
                 let max = null;
@@ -171,6 +172,7 @@ Vue.component('nnview', {
                 });
                 console.log("min", min);
                 console.log("max", max);
+                */
 
                 //load fibers
                 let vtkloader = new THREE.VTKLoader();
@@ -359,39 +361,19 @@ Vue.component('nnview', {
             let h = 200;
             let s = 10;
             let l = 30;
-            let a = Math.max(Math.log(pair.weights.count)/4, 0);
+            //let a = Math.max(Math.log(pair.weights.count)/4, 0);
+            let a = pair.weights.density*100;
+            //console.log(a);
 
-            /*
-            if(!pair) {
-                console.error("pair is null!");
-                return;
-            }
-            */
-
-            /*
-            let l = Math.log(pair.weights.count)*10;
-            let a = 0.2;
-            if(pair._mesh) a = 0.7;          
-            if(pair._mesh && pair._mesh.visible) a = 1.0;
-            */
             if(pair._mesh) l = 90;
-            //if(pair._mesh && pair._mesh.visible) l = 100;
-
             if(pair._selected) {
-                //h=0;
-                //l = Math.max(l, 40);
-                //a = Math.max(l, 0.4);
                 s = 100; //maybe I should use weights for this to show the original weight?
                 l = 50;
+                h = 0;
                 a = 1.0;
             } else if(this.hoverpair && (pair.roi1 == this.hoverpair.roi1 && pair.roi2 == this.hoverpair.roi2)) {
+                //cross hair!
                 h = 30;
-                /*
-                s = 100;
-                l = 50;
-                a = 1;
-                //a = Math.max(a, 0.5);   
-                */
             } else if(this.hoverpair && (pair.roi1 == this.hoverpair.roi1 || pair.roi2 == this.hoverpair.roi2)) {
                 
                 //get roi color
@@ -409,17 +391,12 @@ Vue.component('nnview', {
                 a = Math.max(a, 0.4);      
             }
 
-            /*
-            s = Math.max(s, 0);
-            l = Math.max(l, 0);
-            a = Math.max(a, 0);
-            */
-            
             return "hsla("+h+", "+s+"%, "+l+"%, "+a+")";
         },
 
         getcolumncolor(column) {
             let label = this.labels_o[column];
+            if(!label._mesh) return "gray"; 
             return "rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")";
         },
 
@@ -429,7 +406,6 @@ Vue.component('nnview', {
             this.change_vis(pair.roi1, true);
             this.change_vis(pair.roi2, true);
         },
-
         mouseleave(pair) {
             this.hoverpair = null;
             if(pair._mesh && !pair._selected) pair._mesh.visible = false;
@@ -437,8 +413,23 @@ Vue.component('nnview', {
             this.change_vis(pair.roi1, selected.has(pair.roi1));
             this.change_vis(pair.roi2, selected.has(pair.roi2));
         },
-        
-        click(pair) {
+
+        mouseover_column(column) {
+            let label = this.labels_o[column];
+            this.hovered_roi = column
+            if(label._mesh) label._mesh.visible = true;
+        },
+
+        mouseleave_column(column) {
+            let label = this.labels_o[column];
+            this.hovered_roi = null;
+            if(label._mesh) {
+                let selected = this.selected_rois();
+                if(!selected.has(parseInt(label.label))) label._mesh.visible = false;
+            }
+        },     
+
+        clickpair(pair) {
             let p = this.roi_pairs.indexOf(pair);
             this.roi_pairs[p]._selected = !pair._selected; 
             let selected = this.selected_rois();
@@ -447,23 +438,32 @@ Vue.component('nnview', {
             this.$forceUpdate();
         },
 
-        mousemove(event) {
+        find_roi_mesh(event) {
             var mouse = new THREE.Vector2();
             mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
             mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
             this.raycaster.setFromCamera( mouse, this.camera );
-            var intersects = this.raycaster.intersectObjects( this.scene.children );
-            //find the first non-tracts mesh
-
-            this.hovered_roi = null;
-            //find the first roi hoveverd
+            let intersects = this.raycaster.intersectObjects(this.scene.children);
             for(let i = 0;i < intersects.length; ++i) {
-                //console.log(intersects[i].object._type);
                 let obj = intersects[i].object;
-                if(obj._roi) {
-                    this.hovered_roi = obj._roi;
-                    break;
-                }
+                if(obj._roi) return obj;
+            }
+            return null;
+        },
+
+        mousemove(event) {
+            let now = new Date().getTime();
+            if(now - last_mouseover < 200) return; // too soon since last mousemove handling
+            let obj = this.find_roi_mesh(event);
+            this.hovered_roi = null;
+            if(obj) this.hovered_roi = obj._roi;
+            last_mouseover = now;
+        },
+        
+        click(event) {
+            let obj = this.find_roi_mesh(event);
+            if(obj) {
+                //TODO roi clicked.. what do I do?
             }
         },
 
@@ -513,27 +513,31 @@ Vue.component('nnview', {
     template: `
     <div class="container" style="display:inline-block;">
          <div ref="style" scoped></div>
-         <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove"></div>
+         <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove" @click="click"></div>
          <div class="status">
-            <span v-if="loading">Loading .. <small>{{loading}}</small></span>
-            <span v-else><b>Brent McPherson &middot;</b> Network Neuro</span>
-            <small v-if="hoverpair">{{hoverpair.weights}}</small>
+             <span v-if="loading">Loading .. <small>{{loading}}</small></span>
+             <small v-if="hoverpair">{{hoverpair.weights}}</small>
+            <b>Brent McPherson</b> &middot; Network Neuro &middot; <b><a href="https://brainlife.io">brainlife.io</a></b>
          </div>
-         <a id="bllogo" class="bllogo" href="https://brainlife.io">brainlife</a>
          <div class="amatrix" v-if="roi_pairs && labels">
             <svg> 
-                <g transform="rotate(90 0 0)">
-                    <text v-for="(column, idx) in columns" :key="idx" :x="9*idx+610" :y="9*idx-400" text-anchor="end"
+                <g transform="rotate(-90 315 305)">
+                    <text v-for="(column, idx) in columns" :key="idx" 
+                        :x="9*idx-2" :y="9*idx-2" text-anchor="start"
                         class="label" :class="{'label-selected':is_hovered(column)}"
-                        :transform="'rotate(-45 '+(9*idx+7)+' '+(9*idx+98)+')'" :fill="getcolumncolor(column)">{{labels_o[column].name}}</text>
+                        :transform="'rotate(135 '+(9*idx)+' '+(9*idx)+')'" 
+                        @mouseover="mouseover_column(column)"
+                        @mouseleave="mouseleave_column(column)"
+                        :fill="getcolumncolor(column)">{{labels_o[column].name}}</text>
+
                     <rect v-for="pair in roi_pairs" class="roi"
-                        :x="columns.indexOf(pair.roi2.toString())*9+80" 
-                        :y="columns.indexOf(pair.roi1.toString())*9-690" 
+                        :x="columns.indexOf(pair.roi2.toString())*9" 
+                        :y="columns.indexOf(pair.roi1.toString())*9" 
                         :fill="getcolor(pair)"
                         width="8" height="8" 
                         @mouseover="mouseover(pair)"
                         @mouseleave="mouseleave(pair)"
-                        @click="click(pair)"/>
+                        @click="clickpair(pair)"/>
                 </g>
             </svg>
         </div>

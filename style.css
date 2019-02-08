@@ -98,6 +98,10 @@ transition:max-width .5s, opacity .5s, padding .5s;
 opacity: 0;
 }
 */
+a {
+text-decoration: none;
+color: inherit;
+}
 
 .nifti_chooser {
 padding-left:4px;
@@ -142,22 +146,10 @@ opacity:1;
 tr.row.active label {
 }
 
-.bllogo {
-position: absolute;
-padding-left: 8px;
-padding-top: 8px;
-font-size: 23px;
-font-family: "Open Sans";
-font-weight: bold;
-opacity:.2;
-color:white;
-text-decoration:none;
-}
-
 .status {
 position: absolute;
 bottom:15px;
-left: 15px;
+right: 15px;
 font-size: 16px;
 opacity:.2;
 color:white;
@@ -185,25 +177,28 @@ background-color: black;
 .amatrix {
 /*background-color: rgba(0,0,0,0.5);*/
 position: fixed;
-bottom: 0px;
-right: 0px;
+top: 0px;
+left: 0px;
 }
 .amatrix,
 .amatrix svg {
 pointer-events:none;
-height: 700px;
-width: 700px;
+height: 100%;
+width: 100%;
 }
 .amatrix svg * {
 pointer-events:auto;
 }
 .amatrix .label {
-font: 10px Verdana;
-pointer-events:none;
+font: 11px Verdana;
+/*pointer-events:none;*/
+cursor: pointer;
+user-select: none;
 }
 .amatrix .label-selected {
-font-size: 25px;
+font-size: 27px;
 /*fill: white;*/
+text-shadow: 0px 0px 3px black;
 }
 .amatrix .roi {
 cursor: pointer;
