@@ -27,6 +27,14 @@ Vue.component('nnview', {
             columns: [], //list of roi (1001, 1002, etc..) in the order we want to display them in
 
             raycaster: new THREE.Raycaster(),
+
+            gui: new dat.GUI(),
+            /*
+            controls: {
+                autoRotate: true,
+            }
+            */
+           weight_field: 'density',
         };
     },
 
@@ -50,6 +58,7 @@ Vue.component('nnview', {
         this.load_labels();
         this.load_index();
 
+        /*
         //create pointers
         var geometry = new THREE.Geometry();
         var material = new THREE.LineBasicMaterial( { color : 0xff0000 } );
@@ -63,6 +72,7 @@ Vue.component('nnview', {
         this.roi2_pointer.rotation.x = -Math.PI/2;
         this.roi2_pointer.visible = false;
         this.scene.add(this.roi2_pointer);
+        */
 
         this.renderer.autoClear = false;
         this.renderer.setSize(viewbox.width, viewbox.height);
@@ -76,9 +86,23 @@ Vue.component('nnview', {
 
         window.addEventListener("resize", this.resized);
         this.render();
+
+        this.init_gui();
     },
 
     methods: {
+
+        init_gui() {
+            
+            var ui = this.gui.addFolder('UI');
+            ui.add(this.controls, 'autoRotate');
+            //f1.add(this, 'noiseStrength');
+            ui.open();
+
+            var matrix = this.gui.addFolder('Matrix');
+            matrix.add(this, 'weight_field',  [ 'count', 'density' ]);
+            matrix.open();
+        },
 
         load_labels() {
             //load lables and mesh
@@ -361,9 +385,16 @@ Vue.component('nnview', {
             let h = 200;
             let s = 10;
             let l = 30;
-            //let a = Math.max(Math.log(pair.weights.count)/4, 0);
-            let a = pair.weights.density*100;
-            //console.log(a);
+            let a = 1;
+            switch(this.weight_field) {
+            case "count":
+                a = Math.max(Math.log(pair.weights.count)/4, 0);
+                break;
+            case "density":
+                a = pair.weights.density*200;
+                //console.log(a);
+                break;
+            }
 
             if(pair._mesh) l = 90;
             if(pair._selected) {
@@ -541,9 +572,11 @@ Vue.component('nnview', {
                 </g>
             </svg>
         </div>
+        <!--
         <div class="controls" v-if="controls">
             <input type="checkbox" name="enableRotation" v-model="controls.autoRotate" /> Rotate
         </div>
+        -->
     </div>            
     `
 })
