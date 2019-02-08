@@ -12,13 +12,13 @@
 <body>
     <div id="networkneuro" v-cloak>
         <div class="error" v-if="error">{{error}}</div>
-        <nnview :config="config" v-else></nnview>
+        <nnview v-else/>
     </div>
 	
 	<!-- Dep Scripts -->
 	<script type="text/javascript" src="node_modules/three/build/three.min.js"></script>
 	<script type="text/javascript" src="node_modules/panning-orbit-controls/dist/panning-orbit-controls.js"></script>
-	<script type="text/javascript" src="node_modules/three/examples/js/Detector.js"></script>
+    <!--<script type="text/javascript" src="node_modules/three/examples/js/Detector.js"></script>-->
 	<script type="text/javascript" src="node_modules/three/examples/js/loaders/VTKLoader.js"></script>
 
 	<script type="text/javascript" src="node_modules/pako/dist/pako_inflate.min.js"></script>
@@ -29,27 +29,20 @@
     <script type="text/javascript" src="lib/stats.js"></script>
     
     <script type="text/javascript" src="components/nnview.js"></script>
-    <script type="text/javascript" src="components/amatrix.js"></script>
     
-    <script type="text/javascript" src="labels.js"></script>
 	<script>
-        fetch("testdata/networkneuro/index.json").then(res=>{
-            return res.json();
-        }).then(json=>{
-            const config = { labels, roi_pairs: json.roi_pairs };
-            new Vue({
-                el: '#networkneuro',
-                data: function() {
-                    return {
-                        error: null,
-                        config,
-                    }
-                },
-                components: ['nnview'],
-                created() {
-                    if (!Detector.webgl) this.error = "Your browser does not support WebGL, so the TractViewer is unable to be initiated.";
+        new Vue({
+            el: '#networkneuro',
+            data: function() {
+                return {
+                    error: null,
                 }
-            });
+            },
+            components: ['nnview'],
+            created() {
+                //if (!Detector.webgl) this.error = "Your browser does not support WebGL, so the TractViewer is unable to be initiated.";
+                console.log("app created");
+            }
         });
 	</script>
 </body>

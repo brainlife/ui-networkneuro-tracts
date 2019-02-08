@@ -1,42 +1,30 @@
 let debounce_hashupdate;
 
 Vue.component('nnview', {
-    props: [ "config" ],
-
     data () {
         return {
-            load_percentage: 1,
-
-            all_left: true,
-            all_right: true,
-            visible: true,
-
-            meshes: [],
-
-            dataMin: 0,
-            dataMax: 0,
-            gamma: 1,
-
-            color_map: null,
-            color_map_head: null,
-            hist: [],
-            focused: {},
-
-            scene: null,
             renderer: null,
+
+            scene: null, //where rois mesh and tracts goes
+            back_scene: null, //to put the black silouette
+
             camera: null,
+            camera_light: null,
+
             controls: null,
 
-            camera_light: null,
-            back_scene: null,
-
-            //niftis: [],
-            //selectedNifti: null,
             roi1_pointer: null,
             roi2_pointer: null,
 
             hoverpair: null, //roi pair hovered on amatrix
             hovered_roi: null, //roi mesh hovered on nnview
+
+            loading: false,
+
+            roi_pairs: null, 
+            labels: null,
+
+            columns: [], //list of roi (1001, 1002, etc..) in the order we want to display them in
 
             raycaster: new THREE.Raycaster(),
         };
@@ -59,100 +47,8 @@ Vue.component('nnview', {
         this.camera_light.radius = 10;
         this.scene.add(this.camera_light);
 
-        /*
-        let material = new THREE.MeshPhongMaterial({
-            color: 0x102017,
-            //transparent: true,
-            //side: THREE.DoubleSide,
-            //opacity: 0.5,
-            //colorWrite : false,
-            //vertexColors: THREE.VertexColors,
-            //shininess: 30
-        });
-        */
-
-        let vtkloader = new THREE.VTKLoader();
-        /*
-        vtkloader.load('testdata/lh.10.vtk', geometry => {
-            //geometry.center();
-            //geometry.computeFaceNormals(); //for flat shading
-            geometry.computeVertexNormals(); //for smooth shading
-
-            //let mesh  = THREE.SceneUtils.createMultiMaterialObject(geometry,[material,material_cw] )
-            var mesh = new THREE.Mesh( geometry, material );
-            mesh.rotation.x = -Math.PI/2;
-            this.back_scene.add( mesh );
-        });
-        vtkloader.load('testdata/rh.10.vtk', geometry => {
-            geometry.computeVertexNormals();
-            var mesh = new THREE.Mesh( geometry, material );
-            mesh.rotation.x = -Math.PI/2;
-            this.back_scene.add( mesh );
-        });
-        */
-    
-        //load fibers
-        let tracts = new THREE.Object3D();
-        tracts.id = "tracts";
-        this.scene.add(tracts);
-        async.eachLimit(this.config.roi_pairs, 3, (pair, next_pair)=>{
-            if(pair.filename == "") return next_pair();
-            pair._url = "testdata/networkneuro/"+pair.filename;
-            this.load_pair(pair, this.meshes.length, (err, mesh) => {
-                if (err) return next_tract(err);
-                mesh.rotation.x = -Math.PI/2;
-                mesh.visible = false;
-                this.meshes.push(mesh);
-                tracts.add(mesh);
-                this.load_percentage = this.meshes.length / this.config.roi_pairs.length;
-                Vue.set(pair, '_mesh', mesh); //probably I need to do this?
-                next_pair();
-            });          
-        });
-
-        //load roi vtk
-        async.eachLimit(this.labels, 1, (label, next_label)=>{
-            let id = parseInt(label.label);
-            if(id < 1000 || id > 2035) return next_label();
-
-            let tokens = label.name.split("-");
-            let vtk = "testdata/decimate/ctx-"+tokens[0]+"h-"+tokens[1]+".vtk";
-
-            vtkloader.load(vtk, geometry => {
-                let back_material = new THREE.MeshBasicMaterial({
-                    color: new THREE.Color(0,0,0),
-                    depthTest: false,
-                });
-                var back_mesh = new THREE.Mesh( geometry, back_material );
-                back_mesh.rotation.x = -Math.PI/2;
-                this.back_scene.add(back_mesh);
-
-                let roi_material = new THREE.MeshLambertMaterial({
-                    color: new THREE.Color(label.color.r/256, label.color.g/256, label.color.b/256),
-
-                });
-                geometry.computeVertexNormals(); //for smooth shading
-                var mesh = new THREE.Mesh( geometry, roi_material );
-                mesh.rotation.x = -Math.PI/2;
-                mesh.visible = false;
-                mesh._roi = label.label;
-                this.scene.add(mesh);
-                label._mesh = mesh;
-                label._material = roi_material;
-
-                //calculate mesh center
-                geometry.computeBoundingBox();
-                var center = new THREE.Vector3();
-                geometry.boundingBox.getCenter(center);
-                mesh.localToWorld( center );
-                label._position = center;
-
-                next_label();
-            }, progress=>{}, err=>{
-                //console.error(err);
-                next_label();
-            })
-        });
+        this.load_labels();
+        this.load_index();
 
         //create pointers
         var geometry = new THREE.Geometry();
@@ -174,33 +70,141 @@ Vue.component('nnview', {
         this.$refs.view.appendChild(this.renderer.domElement);
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.autoRotate = true;
-
         this.controls.addEventListener('start', ()=>{
             this.controls.autoRotate = false;
         });
 
         window.addEventListener("resize", this.resized);
-
         this.render();
-        /*
-        if (this.config.layers) {
-            this.config.layers.forEach(layer => {
-                let condensed_filename = layer.url;
-                if (condensed_filename.indexOf('/') != -1) condensed_filename = condensed_filename.substring(condensed_filename.lastIndexOf('/')+1);
-                this.niftis.push({ user_uploaded: false, url: layer.url, user_uploaded: false, filename: condensed_filename });
-            });
-            this.selectedNifti = null;
-        }
-        */
     },
 
     methods: {
+
+        load_labels() {
+            //load lables and mesh
+            fetch("labels.json").then(res=>{
+                return res.json();
+            }).then(json=>{
+
+                let vtkloader = new THREE.VTKLoader();
+
+                this.labels = json.labels;
+                async.eachSeries(this.labels, (label, next_label)=>{
+                    let id = parseInt(label.label);
+                    if(id < 1000 || id > 2035) return next_label(); //only load lables that we care..
+
+                    let tokens = label.name.split("-");
+                    let vtk = "testdata/decimate/ctx-"+tokens[0]+"h-"+tokens[1]+".vtk";
+                    //console.log("loading mesh", vtk);
+
+                    vtkloader.load(vtk, geometry => {
+                        let back_material = new THREE.MeshBasicMaterial({
+                            color: new THREE.Color(0,0,0),
+                            depthTest: false,
+                        });
+                        var back_mesh = new THREE.Mesh( geometry, back_material );
+                        back_mesh.rotation.x = -Math.PI/2;
+                        this.back_scene.add(back_mesh);
+
+                        let roi_material = new THREE.MeshLambertMaterial({
+                            color: new THREE.Color(label.color.r/256, label.color.g/256, label.color.b/256),
+                        });
+
+                        geometry.computeVertexNormals(); //for smooth shading
+                        var mesh = new THREE.Mesh( geometry, roi_material );
+                        mesh.rotation.x = -Math.PI/2;
+                        mesh.visible = false;
+                        mesh._roi = label.label;
+
+                        this.scene.add(mesh);
+
+                        label._mesh = mesh;
+                        label._material = roi_material;
+                        label._hover_material = new THREE.MeshPhongMaterial({
+                            color: new THREE.Color(label.color.r/256*1.5, label.color.g/256*1.5, label.color.b/256*1.5),
+                            shininess: 70,
+                        });
+
+                        //calculate mesh center (for pointers)
+                        geometry.computeBoundingBox();
+                        var center = new THREE.Vector3();
+                        geometry.boundingBox.getCenter(center);
+                        mesh.localToWorld( center );
+                        label._position = center;
+
+                        next_label();
+                    }, progress=>{}, err=>{
+                        console.error(err);
+                        next_label();
+                    })
+                });
+            });
+        },
+
+        load_index() {
+        
+            //load index.json
+            fetch("testdata/networkneuro/index.json").then(res=>{
+                return res.json();
+            }).then(json=>{
+                this.roi_pairs = json.roi_pairs;
+
+                //find unique rois
+                let columns = this.roi_pairs.reduce((a,c)=>{
+                    let label = this.labels_o[c.roi1.toString()];
+                    a.add(label.label);
+                    label = this.labels_o[c.roi2.toString()];
+                    a.add(label.label);
+                    return a;
+                }, new Set());
+                this.columns = [...columns].sort();   
+
+                //find min/max value
+                let min = null;
+                let max = null;
+                this.roi_pairs.forEach(roi=>{
+                    let v = roi.weights.count;
+                    if(v < min || min === null) min = v;
+                    if(v > max || max === null) max = v;
+
+                    roi._selected = false;
+                });
+                console.log("min", min);
+                console.log("max", max);
+
+                //load fibers
+                let vtkloader = new THREE.VTKLoader();
+                let tracts = new THREE.Object3D();
+                this.scene.add(tracts);
+                this.loading = true;
+                console.time('loading_pairs');
+                async.eachSeries(this.roi_pairs/*.slice(0, 100)*/, (pair, next_pair)=>{
+                    //console.log(pair.filename);
+                    if(pair.filename == "") return next_pair();
+                    pair._url = "testdata/networkneuro/"+pair.filename;
+                    this.loading = pair.filename;
+                    this.load_pair(pair, (err, mesh) => {
+                        if (err) return next_tract(err);
+                        mesh.rotation.x = -Math.PI/2;
+                        mesh.visible = false;
+                        tracts.add(mesh);
+                        pair._mesh = mesh;
+                        this.$forceUpdate();
+                        next_pair();
+                    });          
+                }, err=>{
+                    this.loading = false;
+                    console.timeEnd('loading_pairs');
+                });
+            });
+        },
+
         render() {
             //animate
-            //this.controls.enableKeys = !this.inputFocused();
             this.controls.update();
             this.camera_light.position.copy(this.camera.position);
 
+            this.update_rois();
             this.update_pointers();
 
             //render
@@ -212,6 +216,22 @@ Vue.component('nnview', {
             requestAnimationFrame(this.render);
         },
 
+        update_rois() {
+            this.scene.children.forEach(mesh=>{
+                if(mesh._roi) {
+                    let label = this.labels_o[mesh._roi];
+                    if(this.hovered_roi == mesh._roi) {
+                        mesh.material = label._hover_material;
+                        //mesh.material.opacity = 0.2;
+                    } else {
+                        mesh.material = label._material;
+                        //mesh.material.transparent = false;
+                        //mesh.material.opacity = 1;
+                    }
+                }
+            });
+        },
+
         update_pointers() {
             if(!this.hoverpair) {
                 //this.roi1_pointer.visible = false;
@@ -219,9 +239,8 @@ Vue.component('nnview', {
                 return;
             }
 
-            var label = this.labels[this.hoverpair.roi1.toString()];
+            var label = this.labels_o[this.hoverpair.roi1.toString()];
             if(label._mesh) {
-
                 /*
                 //create new geometry
                 var pos1 = new THREE.Vector3( 0.3, 0, 0.5 );
@@ -247,17 +266,17 @@ Vue.component('nnview', {
 
         resized() {
             var viewbox = this.$refs.view.getBoundingClientRect();
-
             this.camera.aspect = viewbox.width / viewbox.height;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(viewbox.width, viewbox.height);
         },
 
-        load_pair(pair, index, cb) {
+        load_pair(pair, cb) {
             fetch(pair._url).then(res=>{
                 return res.json();
             }).then(json=>{
                 var coords = json.coords;
+                
                 //convert each bundle to threads_pos array
                 var threads_pos = [];
                 if(!Array.isArray(coords)) coords = [coords];
@@ -281,7 +300,7 @@ Vue.component('nnview', {
                 geometry.addAttribute('position', new THREE.BufferAttribute(vertices, 3 ) );
                 geometry.vertices = vertices;
 
-                var label = this.labels[pair.roi1.toString()];
+                var label = this.labels_o[pair.roi1.toString()];
                 var material = new THREE.LineBasicMaterial({
                     color: new THREE.Color(label.color.r/256*3, label.color.g/256*3, label.color.b/256*3),
                     transparent: true,
@@ -296,18 +315,136 @@ Vue.component('nnview', {
         },
 
         /*
-        showAll() {
-            this.meshes.forEach(m => m.visible = true);
-        },
-
-        inputFocused: function() {
-            let result = false;
-            Object.keys(this.$refs).forEach(k => result = result || (document.activeElement == this.$refs[k]) );
-            return result;
+        mouseover_pair(pair) {
+            if(pair._mesh) pair._mesh.visible = true;
+           
+            this.hoverpair = pair;
+            this.change_vis(pair.roi1, true);
+            this.change_vis(pair.roi2, true);
         },
         */
-        update_hoverpair(pair) {
+
+        /*
+        mouseleave_pair(pair) {
+            if(pair._mesh && !pair._selected) pair._mesh.visible = false;
+
+            this.hoverpair = null;
+            let selected = this.selected_rois();
+            this.change_vis(pair.roi1, selected.has(pair.roi1));
+            this.change_vis(pair.roi2, selected.has(pair.roi2));
+        },
+        */
+
+        change_vis(roi, vis) {
+            let mesh = this.labels_o[roi]._mesh;
+            if(mesh) mesh.visible = vis;
+        },
+
+        /*
+        clickpair(pair) {
+            let p = this.roi_pairs.indexOf(pair);
+            this.roi_pairs[p]._selected = !pair._selected; 
+            //Vue.set(pair, '_selected', !pair._selected);
+            console.log("pair clicked", pair);
+            console.log("hovered roi?", this.hoverpair);
+
+            let selected = this.selected_rois();
+            this.change_vis(pair.roi1, selected.has(pair.roi1)||this.hoverpair.roi1 == pair.roi1);
+            this.change_vis(pair.roi2, selected.has(pair.roi2)||this.hoverpair.roi2 == pair.roi2);
+            //console.log("_selected", pair._selected);
+        },
+        */
+
+        getcolor(pair) {
+            let h = 200;
+            let s = 10;
+            let l = 30;
+            let a = Math.max(Math.log(pair.weights.count)/4, 0);
+
+            /*
+            if(!pair) {
+                console.error("pair is null!");
+                return;
+            }
+            */
+
+            /*
+            let l = Math.log(pair.weights.count)*10;
+            let a = 0.2;
+            if(pair._mesh) a = 0.7;          
+            if(pair._mesh && pair._mesh.visible) a = 1.0;
+            */
+            if(pair._mesh) l = 90;
+            //if(pair._mesh && pair._mesh.visible) l = 100;
+
+            if(pair._selected) {
+                //h=0;
+                //l = Math.max(l, 40);
+                //a = Math.max(l, 0.4);
+                s = 100; //maybe I should use weights for this to show the original weight?
+                l = 50;
+                a = 1.0;
+            } else if(this.hoverpair && (pair.roi1 == this.hoverpair.roi1 && pair.roi2 == this.hoverpair.roi2)) {
+                h = 30;
+                /*
+                s = 100;
+                l = 50;
+                a = 1;
+                //a = Math.max(a, 0.5);   
+                */
+            } else if(this.hoverpair && (pair.roi1 == this.hoverpair.roi1 || pair.roi2 == this.hoverpair.roi2)) {
+                
+                //get roi color
+                let label;
+                if(pair.roi1 == this.hoverpair.roi1) label = this.labels_o[this.hoverpair.roi1];
+                if(pair.roi2 == this.hoverpair.roi2) label = this.labels_o[this.hoverpair.roi2];
+                let c = new THREE.Color("rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")");
+
+                //massage it a bit
+                let hsl = {h, s, l};
+                c.getHSL(hsl);
+                h = hsl.h*360;
+                l = hsl.l*100;
+                s = 50;
+                a = Math.max(a, 0.4);      
+            }
+
+            /*
+            s = Math.max(s, 0);
+            l = Math.max(l, 0);
+            a = Math.max(a, 0);
+            */
+            
+            return "hsla("+h+", "+s+"%, "+l+"%, "+a+")";
+        },
+
+        getcolumncolor(column) {
+            let label = this.labels_o[column];
+            return "rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")";
+        },
+
+        mouseover(pair) {
             this.hoverpair = pair;
+            if(pair._mesh) pair._mesh.visible = true;
+            this.change_vis(pair.roi1, true);
+            this.change_vis(pair.roi2, true);
+        },
+
+        mouseleave(pair) {
+            this.hoverpair = null;
+            if(pair._mesh && !pair._selected) pair._mesh.visible = false;
+            let selected = this.selected_rois();
+            this.change_vis(pair.roi1, selected.has(pair.roi1));
+            this.change_vis(pair.roi2, selected.has(pair.roi2));
+        },
+        
+        click(pair) {
+            let p = this.roi_pairs.indexOf(pair);
+            this.roi_pairs[p]._selected = !pair._selected; 
+            let selected = this.selected_rois();
+            this.change_vis(pair.roi1, selected.has(pair.roi1)||this.hoverpair.roi1 == pair.roi1);
+            this.change_vis(pair.roi2, selected.has(pair.roi2)||this.hoverpair.roi2 == pair.roi2);
+            this.$forceUpdate();
         },
 
         mousemove(event) {
@@ -319,27 +456,42 @@ Vue.component('nnview', {
             //find the first non-tracts mesh
 
             this.hovered_roi = null;
-            //find the first roi
+            //find the first roi hoveverd
             for(let i = 0;i < intersects.length; ++i) {
                 //console.log(intersects[i].object._type);
-                if(intersects[i].object._roi) {
-                    this.hovered_roi = intersects[i].object._roi;
+                let obj = intersects[i].object;
+                if(obj._roi) {
+                    this.hovered_roi = obj._roi;
                     break;
                 }
             }
-        }
+        },
+
+        selected_rois: function() {
+            let rois = new Set();
+            this.roi_pairs.forEach(pair=>{
+                if(!pair._selected) return;
+                rois.add(pair.roi1);
+                rois.add(pair.roi2);
+            });
+            return rois;
+        },
+
+        is_hovered: function(column) {
+            return (this.hoverpair && (this.hoverpair.roi1 == column || this.hoverpair.roi2 == column) || this.hovered_roi == column)
+        },
     },
 
     computed: {
 
-        //create label look up object
-        labels: function() {
-            return this.config.labels.reduce((a,c)=>{
+        //labels lookup by column id
+        labels_o: function() {
+            return this.labels.reduce((a,c)=>{
                 a[c.label.toString()] = c;
                 return a;
             }, {});
         },
-
+           
     },
 
     watch: {
@@ -362,16 +514,32 @@ Vue.component('nnview', {
     <div class="container" style="display:inline-block;">
          <div ref="style" scoped></div>
          <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove"></div>
-         <div v-if="load_percentage < 1" id="loading" class="status">
-            <span v-if="load_percentage < 1">Loading .. {{Math.round(load_percentage*100)}}%</span>
-            <span v-else>Network Neuro <b>&middot; Brent McPherson</b></span>
+         <div class="status">
+            <span v-if="loading">Loading .. <small>{{loading}}</small></span>
+            <span v-else><b>Brent McPherson &middot;</b> Network Neuro</span>
             <small v-if="hoverpair">{{hoverpair.weights}}</small>
          </div>
          <a id="bllogo" class="bllogo" href="https://brainlife.io">brainlife</a>
-         <amatrix :roi_pairs="config.roi_pairs" :labels="config.labels" :hovered_roi="hovered_roi" @hover="update_hoverpair" @leave="hoverpair = null"/>
-         <div class="controls" v-if="controls">
+         <div class="amatrix" v-if="roi_pairs && labels">
+            <svg> 
+                <g transform="rotate(90 0 0)">
+                    <text v-for="(column, idx) in columns" :key="idx" :x="9*idx+610" :y="9*idx-400" text-anchor="end"
+                        class="label" :class="{'label-selected':is_hovered(column)}"
+                        :transform="'rotate(-45 '+(9*idx+7)+' '+(9*idx+98)+')'" :fill="getcolumncolor(column)">{{labels_o[column].name}}</text>
+                    <rect v-for="pair in roi_pairs" class="roi"
+                        :x="columns.indexOf(pair.roi2.toString())*9+80" 
+                        :y="columns.indexOf(pair.roi1.toString())*9-690" 
+                        :fill="getcolor(pair)"
+                        width="8" height="8" 
+                        @mouseover="mouseover(pair)"
+                        @mouseleave="mouseleave(pair)"
+                        @click="click(pair)"/>
+                </g>
+            </svg>
+        </div>
+        <div class="controls" v-if="controls">
             <input type="checkbox" name="enableRotation" v-model="controls.autoRotate" /> Rotate
-         </div>
+        </div>
     </div>            
     `
 })
