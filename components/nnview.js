@@ -17,18 +17,21 @@ Vue.component('nnview', {
             roi2_pointer: null,
 
             hoverpair: null, //roi pair hovered on amatrix
-            hovered_roi: null, //roi mesh hovered on nnview
+            hovered_column: null, //roi mesh hovered on nnview
 
             loading: false,
 
             roi_pairs: null, 
             labels: null,
+            labels_o: null,
 
             columns: [], //list of roi (1001, 1002, etc..) in the order we want to display them in
 
             raycaster: new THREE.Raycaster(),
+            mouse_moved: null,
 
             gui: new dat.GUI(),
+
             /*
             controls: {
                 autoRotate: true,
@@ -86,7 +89,6 @@ Vue.component('nnview', {
         });
 
         window.addEventListener("resize", this.resized);
-        this.render();
 
         this.init_gui();
     },
@@ -112,17 +114,25 @@ Vue.component('nnview', {
             }).then(json=>{
                 this.labels = json.labels;
 
+                //convert label name "1001" to 1001 to be consistent
+                this.labels.forEach(label=>{label.label = parseInt(label.label);});
+                
+                //labels lookup by column id
+                this.labels_o = this.labels.reduce((a,c)=>{
+                    a[c.label] = c;
+                    return a;
+                }, {});
+        
                 this.load_pairs();
+                this.render();
 
                 let vtkloader = new THREE.VTKLoader();
                 async.eachSeries(this.labels, (label, next_label)=>{
-                    let id = parseInt(label.label);
-                    if(id < 1000 || id > 2035) return next_label(); //only load lables that we care..
+                    //only try loading lables that we care..
+                    if(!((label.label > 1000 && label.label < 1036) || (label.label > 2000 && label.label < 2036))) return next_label();
 
                     let tokens = label.name.split("-");
                     let vtk = "testdata/decimate/ctx-"+tokens[0]+"h-"+tokens[1]+".vtk";
-                    //console.log("loading mesh", vtk);
-
                     vtkloader.load(vtk, geometry => {
                         let back_material = new THREE.MeshBasicMaterial({
                             color: new THREE.Color(0,0,0),
@@ -150,13 +160,15 @@ Vue.component('nnview', {
                             color: new THREE.Color(label.color.r/256*1.25, label.color.g/256*1.25, label.color.b/256*1.25),
                             shininess: 70,
                         });
-
+                        /*
                         //calculate mesh center (for pointers)
                         geometry.computeBoundingBox();
                         var center = new THREE.Vector3();
                         geometry.boundingBox.getCenter(center);
                         mesh.localToWorld( center );
                         label._position = center;
+                        */
+
                         this.$forceUpdate();
                         next_label();
                     }, progress=>{}, err=>{
@@ -177,16 +189,14 @@ Vue.component('nnview', {
                 //find unique rois
                 let columns = this.roi_pairs.reduce((a,c)=>{
                     //roi1
-                    let label = this.labels_o[c.roi1.toString()];
+                    let label = this.labels_o[c.roi1];
                     a.add(label.label);
                     //roi2
-                    label = this.labels_o[c.roi2.toString()];
+                    label = this.labels_o[c.roi2];
                     a.add(label.label);
                     return a;
                 }, new Set());
                 this.columns = [...columns].sort();   
-                //console.log("columns");
-                //console.log(this.columns);
 
                 /*
                 //find min/max value
@@ -212,6 +222,7 @@ Vue.component('nnview', {
                 let batches = {};
 
                 function create_mesh(pair, coords) {
+                    //console.log("creating mesh for", pair.roi1, pair.roi2)
                     //convert each bundle to threads_pos array
                     var threads_pos = [];
                     if(!Array.isArray(coords)) coords = [coords];
@@ -235,9 +246,10 @@ Vue.component('nnview', {
                     geometry.addAttribute('position', new THREE.BufferAttribute(vertices, 3 ) );
                     geometry.vertices = vertices;
         
-                    var label = this.labels_o[pair.roi1.toString()];
+                    //var label = this.labels_o[pair.roi1];
                     var material = new THREE.LineBasicMaterial({
-                        color: new THREE.Color(label.color.r/256*3, label.color.g/256*3, label.color.b/256*3),
+                        //color: new THREE.Color(label.color.r/256*3, label.color.g/256*3, label.color.b/256*3),
+                        color: this.gettractcolor(pair, 3),
                         transparent: true,
                         opacity: this.tract_opacity,
                         //vertexColors: THREE.VertexColors
@@ -249,15 +261,16 @@ Vue.component('nnview', {
                     tracts.add(mesh);
                     pair._mesh = mesh;
                     pair._roi_material = mesh.material; //store original material to restore from animiation
-                    this.$forceUpdate();
+
+                    //this.$forceUpdate();
                 }
 
                 async.eachSeries(this.roi_pairs/*.slice(0, 100)*/, (pair, next_pair)=>{
-                    //console.log(pair.filename);
                     if(pair.filename == "") return next_pair();
                     let batch = batches[pair.filename];
                     if(batch === undefined) {
                         this.loading = pair.filename;
+                        console.log(pair.filename);
                         fetch("testdata/networkneuro/"+pair.filename).then(res=>{
                             return res.json();
                         }).then(json=>{
@@ -266,7 +279,7 @@ Vue.component('nnview', {
                             next_pair();
                         });
                     } else {
-                        //already loaded.. 
+                        //already loaded.. pick an idx
                         create_mesh.call(this, pair, batch[pair.idx].coords);    
                         next_pair();   
                     }
@@ -282,6 +295,14 @@ Vue.component('nnview', {
             this.controls.update();
             this.camera_light.position.copy(this.camera.position);
 
+            //find_roi_mesh is slow, so let's only test when a mouse moves and on an animaite frame
+            if(this.mouse_moved) {
+                let obj = this.find_roi_mesh(this.mouse_moved);
+                this.hovered_column = null;
+                if(obj) this.hovered_column = obj._roi;
+                this.mouse_moved = null;
+            }
+    
             this.update_rois();
             this.update_pointers();
 
@@ -306,10 +327,10 @@ Vue.component('nnview', {
         update_rois() {
             this.scene.children.forEach(mesh=>{
                 if(mesh._roi) {
-                    //decide if we want to highlight the roi
+                    //decide if we want to highlight the roila
                     let label = this.labels_o[mesh._roi];
                     let highlight = false;
-                    if(this.hovered_roi == mesh._roi) highlight = true;      
+                    if(this.hovered_column == mesh._roi) highlight = true;      
                     if(this.hoverpair) {
                         if(this.hoverpair.roi1 == label.label) highlight = true;
                         if(this.hoverpair.roi2 == label.label) highlight = true;
@@ -327,7 +348,7 @@ Vue.component('nnview', {
                 return;
             }
 
-            var label = this.labels_o[this.hoverpair.roi1.toString()];
+            var label = this.labels_o[this.hoverpair.roi1];
             if(label._mesh) {
                 /*
                 //create new geometry
@@ -360,10 +381,15 @@ Vue.component('nnview', {
         },
 
         getcolor(pair) {
+            //default
             let h = 200;
             let s = 10;
             let l = 30;
             let a = 1;
+
+            //return "white";
+
+            //apply alpha using weight
             switch(this.weight_field) {
             case "count":
                 a = Math.max(Math.log(pair.weights.count)/4, 0);
@@ -373,40 +399,60 @@ Vue.component('nnview', {
                 //console.log(a);
                 break;
             }
-
-            if(pair._mesh) l = 90;
+    
+            if(pair._mesh) l = 80;
             if(pair._selected) {
                 s = 100; //maybe I should use weights for this to show the original weight?
                 l = 50;
                 h = 0;
                 a = 1.0;
-            } else if(this.hoverpair && (pair.roi1 == this.hoverpair.roi1 && pair.roi2 == this.hoverpair.roi2)) {
-                //cross hair!
-                h = 30;
-            } else if(this.hoverpair && (pair.roi1 == this.hoverpair.roi1 || pair.roi2 == this.hoverpair.roi2)) {
-                
-                //get roi color
-                let label;
-                if(pair.roi1 == this.hoverpair.roi1) label = this.labels_o[this.hoverpair.roi1];
-                if(pair.roi2 == this.hoverpair.roi2) label = this.labels_o[this.hoverpair.roi2];
-                let c = new THREE.Color("rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")");
+            } else {
+                //check what we are hovering on
+                let hover_label1;
+                let hover_label2;
+                if(this.hoverpair) {
+                    if(pair.roi1 == this.hoverpair.roi1) hover_label1 = this.labels_o[this.hoverpair.roi1];
+                    if(pair.roi2 == this.hoverpair.roi2) hover_label2 = this.labels_o[this.hoverpair.roi2];
+                }
+                if(this.hovered_column) {
+                    var label = this.labels_o[this.hovered_column];
+                    if(pair.roi1 == label.label) hover_label1 = label;
+                    if(pair.roi2 == label.label) hover_label2 = label;
+                }
 
-                //massage it a bit
-                let hsl = {h, s, l};
-                c.getHSL(hsl);
-                h = hsl.h*360;
-                l = hsl.l*100;
-                s = 50;
-                a = Math.max(a, 0.4);      
+                //then decide the color
+                if(hover_label1 && hover_label2) {
+                    return this.gettractcolor(pair, 2).getStyle();
+                } else if(hover_label1 || hover_label2) {
+                    //get roi color
+                    let color;
+                    if(hover_label1 && pair.roi1 == hover_label1.label) color = hover_label1.color;
+                    if(hover_label2 && pair.roi2 == hover_label2.label) color = hover_label2.color;
+                    let c = new THREE.Color(color.r*2/256, color.g*2/256, color.b*2/256);
+
+                    //massage it a bit
+                    let hsl = {h, s, l};
+                    c.getHSL(hsl);
+                    h = hsl.h*360;
+                    l = hsl.l*100;
+                    s = 50;
+                    a = Math.max(a, 0.4);      
+                }
             }
-
             return "hsla("+h+", "+s+"%, "+l+"%, "+a+")";
+        },
+
+        gettractcolor(pair, multi) {
+            let label1 = this.labels_o[pair.roi1];
+            let label2 = this.labels_o[pair.roi2];
+            //TODO - find middle color between label1 and label2 (and inverse it?)
+            return new THREE.Color(label1.color.r*multi/256, label1.color.g*multi/256, label1.color.b*multi/256);
         },
 
         getcolumncolor(column) {
             let label = this.labels_o[column];
             if(!label._mesh) return "gray"; 
-            return "rgb("+label.color.r*2+","+label.color.g*2+","+label.color.b*2+")";
+            return new THREE.Color(label.color.r*2/256, label.color.g*2/256, label.color.b*2/256).getStyle();
         },
 
         showhide_roi(roi, vis) {
@@ -434,16 +480,16 @@ Vue.component('nnview', {
 
         mouseover_column(column) {
             let label = this.labels_o[column];
-            this.hovered_roi = column
+            this.hovered_column = column;
             if(label._mesh) label._mesh.visible = true;
         },
 
         mouseleave_column(column) {
             let label = this.labels_o[column];
-            this.hovered_roi = null;
+            this.hovered_column = null;
             if(label._mesh) {
                 let selected = this.selected_rois();
-                if(!selected.has(parseInt(label.label))) label._mesh.visible = false;
+                if(!selected.has(label.label)) label._mesh.visible = false;
             }
         },     
 
@@ -456,12 +502,11 @@ Vue.component('nnview', {
             this.$forceUpdate();
         },
 
-        find_roi_mesh(event) {
-            var mouse = new THREE.Vector2();
-            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        find_roi_mesh(mouse) {
             this.raycaster.setFromCamera( mouse, this.camera );
             let intersects = this.raycaster.intersectObjects(this.scene.children);
+
+            //select first roi mesh
             for(let i = 0;i < intersects.length; ++i) {
                 let obj = intersects[i].object;
                 if(obj._roi) return obj;
@@ -470,12 +515,9 @@ Vue.component('nnview', {
         },
 
         mousemove(event) {
-            //let now = new Date().getTime();
-            //if(now - last_mouseover < 200) return; // too soon since last mousemove handling
-            let obj = this.find_roi_mesh(event);
-            this.hovered_roi = null;
-            if(obj) this.hovered_roi = obj._roi;
-            //last_mouseover = now;
+            this.mouse_moved = new THREE.Vector2();
+            this.mouse_moved.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+            this.mouse_moved.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
         },
         
         click(event) {
@@ -496,20 +538,9 @@ Vue.component('nnview', {
         },
 
         is_hovered: function(column) {
-            return (this.hoverpair && (this.hoverpair.roi1 == column || this.hoverpair.roi2 == column) || this.hovered_roi == column)
+            //console.log(this.hovered_column, column);
+            return (this.hoverpair && (this.hoverpair.roi1 == column || this.hoverpair.roi2 == column) || this.hovered_column == column)
         },
-    },
-
-    computed: {
-
-        //labels lookup by column id
-        labels_o: function() {
-            return this.labels.reduce((a,c)=>{
-                a[c.label.toString()] = c;
-                return a;
-            }, {});
-        },
-           
     },
 
     watch: {
@@ -534,10 +565,12 @@ Vue.component('nnview', {
          <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove" @click="click"></div>
          <div v-if="loading" class="loading">Loading .. <small>{{loading}}</small></div>
          <div class="status">
-             <small v-if="hoverpair">{{hoverpair.weights}}</small>
-            <b>Brent McPherson</b> &middot; Network Neuro &middot; <b><a href="https://brainlife.io">brainlife.io</a></b>
+             <small v-if="hoverpair">{{hoverpair.weights}}</small><br>
+             <b><a href="https://brainlife.io">brainlife.io</a></b><br>
+             Network Neuro<br>
+            <b>Brent McPherson</b>
          </div>
-         <div class="amatrix" v-if="roi_pairs && labels">
+         <div class="amatrix" v-if="roi_pairs">
             <svg> 
                 <g transform="rotate(-90 315 305)">
                     <text v-for="(column, idx) in columns" :key="idx" 
@@ -549,8 +582,8 @@ Vue.component('nnview', {
                         :fill="getcolumncolor(column)">{{labels_o[column].name}}</text>
 
                     <rect v-for="pair in roi_pairs" class="roi"
-                        :x="columns.indexOf(pair.roi2.toString())*9" 
-                        :y="columns.indexOf(pair.roi1.toString())*9" 
+                        :x="columns.indexOf(pair.roi2)*9" 
+                        :y="columns.indexOf(pair.roi1)*9" 
                         :fill="getcolor(pair)"
                         width="8" height="8" 
                         @mouseover="mouseover(pair)"
@@ -568,6 +601,7 @@ Vue.component('nnview', {
     `
 })
 
+/*
 let white_material = new THREE.LineBasicMaterial({
     color: new THREE.Color(1, 1, 1)
 });
@@ -600,4 +634,4 @@ function removeRightText(tractName) {
     if (tractName.endsWith(' R')) tractName = tractName.substring(0, tractName.length - 2);
     return tractName;
 }
-
+*/

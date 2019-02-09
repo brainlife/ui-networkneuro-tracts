@@ -153,6 +153,7 @@ right: 15px;
 font-size: 16px;
 opacity:.2;
 color:white;
+text-align: right;
 }
 
 .loading {
@@ -160,9 +161,10 @@ position: fixed;
 width: 100%;
 bottom: 150px;
 color: white;
-opacity: 0.5;
+opacity: 0.3;
 text-align: center;
 pointer-events:none;
+font-size: 150%;
 }
 
 .xyz_input {
