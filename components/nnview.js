@@ -4,6 +4,7 @@ Vue.component('nnview', {
     data () {
         return {
             renderer: null,
+            //componer: null,
 
             scene: null, //where rois mesh and tracts goes
             back_scene: null, //to put the black silouette
@@ -31,6 +32,7 @@ Vue.component('nnview', {
             mouse_moved: null,
 
             gui: new dat.GUI(),
+            stats: new Stats(),
 
             /*
             controls: {
@@ -50,15 +52,18 @@ Vue.component('nnview', {
         this.back_scene = new THREE.Scene();
 
         let viewbox = this.$refs.view.getBoundingClientRect();
-        this.camera = new THREE.PerspectiveCamera(45, viewbox.width / viewbox.height, 1, 5000);
+        this.camera = new THREE.PerspectiveCamera(45, viewbox.width / viewbox.height, 1, 1000);
         this.camera.position.z = 200;
         
-        var ambientLight = new THREE.AmbientLight(0x303030);
+        var ambientLight = new THREE.AmbientLight(0x505050);
         this.scene.add(ambientLight);
 
         this.camera_light = new THREE.PointLight(0xffffff, 1);
         this.camera_light.radius = 10;
         this.scene.add(this.camera_light);
+
+        this.stats.showPanel(1);
+        document.body.appendChild(this.stats.dom);
 
         this.load();
 
@@ -80,13 +85,25 @@ Vue.component('nnview', {
 
         this.renderer.autoClear = false;
         this.renderer.setSize(viewbox.width, viewbox.height);
-        this.renderer.setClearColor(new THREE.Color(.1,.1,.1));
+        //this.renderer.setClearColor(new THREE.Color(.15,.14,.13));
         this.$refs.view.appendChild(this.renderer.domElement);
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.autoRotate = true;
         this.controls.addEventListener('start', ()=>{
             this.controls.autoRotate = false;
         });
+
+        /*
+        this.composer = new THREE.EffectComposer( this.renderer );
+        this.composer.addPass( new THREE.RenderPass( this.scene, this.camera ) );
+
+        let hblur = new THREE.ShaderPass( THREE.HorizontalBlurShader );
+        this.composer.addPass( hblur );
+        
+        let vblur = new THREE.ShaderPass( THREE.VerticalBlurShader );
+        vblur.renderToScreen = true;
+        this.composer.addPass( vblur );
+        */
 
         window.addEventListener("resize", this.resized);
 
@@ -143,7 +160,7 @@ Vue.component('nnview', {
                         this.back_scene.add(back_mesh);
 
                         let roi_material = new THREE.MeshLambertMaterial({
-                            color: new THREE.Color(label.color.r/256*0.5, label.color.g/256*0.5, label.color.b/256*0.5),
+                            color: new THREE.Color(label.color.r/256*0.75, label.color.g/256*0.75, label.color.b/256*0.75),
                         });
 
                         geometry.computeVertexNormals(); //for smooth shading
@@ -156,9 +173,12 @@ Vue.component('nnview', {
 
                         label._mesh = mesh;
                         label._material = roi_material;
+                        //we could also use MeshStandardMetarial
+                        //MeshPhongMaterial
+                        //MeshLambertMaterial
                         label.__lightlight_material = new THREE.MeshPhongMaterial({
                             color: new THREE.Color(label.color.r/256*1.25, label.color.g/256*1.25, label.color.b/256*1.25),
-                            shininess: 70,
+                            shininess: 80,
                         });
                         /*
                         //calculate mesh center (for pointers)
@@ -170,7 +190,7 @@ Vue.component('nnview', {
                         */
 
                         this.$forceUpdate();
-                        next_label();
+                        setTimeout(next_label, 0); //yeild to ui
                     }, progress=>{}, err=>{
                         console.error(err);
                         next_label();
@@ -254,6 +274,7 @@ Vue.component('nnview', {
                         opacity: this.tract_opacity,
                         //vertexColors: THREE.VertexColors
                         //depthTest: false,
+                        //lights: true, //locks up
                     });
                     var mesh = new THREE.LineSegments( geometry, material );
                     mesh.rotation.x = -Math.PI/2;
@@ -276,12 +297,12 @@ Vue.component('nnview', {
                         }).then(json=>{
                             batches[pair.filename] = json;
                             create_mesh.call(this, pair, json[pair.idx].coords);    
-                            next_pair();
+                            setTimeout(next_pair, 0); //yeild to ui
                         });
                     } else {
                         //already loaded.. pick an idx
                         create_mesh.call(this, pair, batch[pair.idx].coords);    
-                        next_pair();   
+                        setTimeout(next_pair, 0); //yeild to ui
                     }
                 }, err=>{
                     this.loading = false;
@@ -291,6 +312,8 @@ Vue.component('nnview', {
         },
 
         render() {
+            this.stats.begin();
+
             //animate
             this.controls.update();
             this.camera_light.position.copy(this.camera.position);
@@ -310,9 +333,7 @@ Vue.component('nnview', {
                 //pick the milliseconds
                 let now = new Date().getTime();
                 let l = Math.cos((now%1000)*(2*Math.PI/1000));
-                //console.log(l);
-                this.hoverpair._mesh.material.opacity = (l+1)/2;
-                //console.log(this.hoverpair._mesh);
+                this.hoverpair._mesh.material.opacity = (l+2)/4;
             }
 
             //render
@@ -320,7 +341,9 @@ Vue.component('nnview', {
             this.renderer.render(this.back_scene, this.camera);
             this.renderer.clearDepth();
             this.renderer.render(this.scene, this.camera);
+            //this.composer.render();
 
+            this.stats.end();
             requestAnimationFrame(this.render);
         },
 
