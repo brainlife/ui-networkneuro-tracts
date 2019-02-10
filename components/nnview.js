@@ -433,8 +433,9 @@ Vue.component('nnview', {
             //default
             let h = 0;
             let s = 10;
-            let l = 50;
+            let l = 100;
             let a = 1;
+
 
             //return "white";
 
@@ -453,6 +454,7 @@ Vue.component('nnview', {
             let v = pair.weights[this.weight_field];
             //let mid_weight = (this.max_weight - this.min_weight)/100; //only show bottom half
             a = v.map(this.min_weight, this.max_weight, 0, 1);
+            a = Math.max(a, 0); //crop at 0 or will mess up svg
             /*
             let minp = 0;
             let maxp = 1.0;
@@ -468,10 +470,17 @@ Vue.component('nnview', {
             if(pair.roi1 == "1001" && pair.roi2 == "1002") console.log(mid_weight);
             */
 
-            if(pair._mesh) l = 100;
+            //not yet loaded
+            if(!pair._mesh) {
+                s = 50;
+                h = 200;
+                l = 50;
+                //a = 0.5;
+            }
+
             if(pair._selected) {
                 s = 100; //maybe I should use weights for this to show the original weight?
-                //l = 50;
+                l = 50; //need to be 50 or gets too pink
                 h = 0;
                 a = 1.0;
             } else {
