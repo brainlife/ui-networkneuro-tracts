@@ -44,28 +44,6 @@ right:0;
 top:0;
 }
 
-.controls {
-display:inline-block;
-position:absolute;
-right:0;
-top:0;
-width:auto;
-height:auto;
-white-space:nowrap;
-font-size:13px;
-background:rgba(0, 0, 0, .4);
-line-height: 130%;
-color: #fff;
-padding: 8px;
-overflow-x:hidden;
-overflow-y:auto;
-max-height:100%;
-transition: opacity 0.3s;
-}
-.controls.controls-hidden {
-opacity: 0;
-}	
-
 /* Hide/Show Vertical Alignment */
 .parent {
 padding-right:4px;
@@ -83,22 +61,6 @@ display:table-cell;
 vertical-align:middle;
 }
 
-/*
-.container_toggles {
-display:inline-block;
-max-width:500px;
-width:auto;
-height:auto;
-max-height:100%;
-padding: 8px;
-overflow-y:auto;
-overflow-x:hidden;
-transition:max-width .5s, opacity .5s, padding .5s;
-}
-.container_toggles.hidden {
-opacity: 0;
-}
-*/
 a {
 text-decoration: none;
 color: inherit;
@@ -190,16 +152,15 @@ background-color: black;
 .amatrix {
 /*background-color: rgba(0,0,0,0.5);*/
 position: fixed;
-top: 0px;
+top: 25px;
 left: 0px;
 }
-.amatrix,
-.amatrix svg {
+.amatrix {
 pointer-events:none;
 height: 100%;
 width: 100%;
 }
-.amatrix svg * {
+.amatrix * {
 pointer-events:auto;
 }
 .amatrix .label {
@@ -215,4 +176,21 @@ text-shadow: 0px 0px 5px black;
 }
 .amatrix .roi {
 cursor: pointer;
+}
+
+.legend {
+position: absolute;
+top: 0px;
+left: 0px;
+height: 30px;
+width: 500px;
+pointer-events:none;
+}
+.legend text {
+font: 13px 'Open Sans';
+fill: white;
+}
+.legend .number {
+font: 10px Verdana;
+opacity: 0.7;
 }

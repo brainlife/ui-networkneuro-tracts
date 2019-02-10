@@ -1,5 +1,11 @@
 let last_mouseover;
 
+//linear scaling.. I think we need inverse log.
+Number.prototype.map = function (in_min, in_max, out_min, out_max) {
+    return (this - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+
 Vue.component('nnview', {
     data () {
         return {
@@ -33,13 +39,17 @@ Vue.component('nnview', {
 
             gui: new dat.GUI(),
             stats: new Stats(),
+            show_stats: false,
 
             /*
             controls: {
                 autoRotate: true,
             }
             */
-            weight_field: 'density',
+            weight_field: 'count',
+            min_weight: null,
+            //min_non0_weight: null,
+            max_weight: null,
 
             tract_opacity: 0.6,
         };
@@ -63,7 +73,11 @@ Vue.component('nnview', {
         this.scene.add(this.camera_light);
 
         this.stats.showPanel(1);
-        document.body.appendChild(this.stats.dom);
+        this.$refs.stats.appendChild(this.stats.dom);
+        this.stats.dom.style.top = null;
+        this.stats.dom.style.bottom = "5px";
+        this.stats.dom.style.left = null;
+        this.stats.dom.style.right = "5px";
 
         this.load();
 
@@ -110,12 +124,35 @@ Vue.component('nnview', {
         this.init_gui();
     },
 
+    watch: {
+        weight_field(v, oldv) {
+            this.compute_minmax();
+        }
+    },
+
     methods: {
+        compute_minmax() {
+            //find min/max value
+            let min = null;
+            let min_non0 = null;
+            let max = null;
+            this.roi_pairs.forEach(roi=>{
+                let v = roi.weights[this.weight_field];
+                if(v < min || min === null) min = v;
+                //if(v < min_non0 || min_non0 === null || min_non0 == 0) min_non0 = v;
+                if(v > max || max === null) max = v;
+                //roi._selected = false; //this was needed at some point.. to fix some UI bug.
+            });
+            this.min_weight = min;
+            //this.min_non0_weight = min_non0;
+            this.max_weight = max;
+        },
 
         init_gui() {
             
             var ui = this.gui.addFolder('UI');
             ui.add(this.controls, 'autoRotate').listen();
+            ui.add(this, 'show_stats');
             //f1.add(this, 'noiseStrength');
             ui.open();
 
@@ -195,6 +232,8 @@ Vue.component('nnview', {
                         console.error(err);
                         next_label();
                     })
+                }, err=>{
+                    //finished loading all rois!
                 });
             });
         },
@@ -205,6 +244,7 @@ Vue.component('nnview', {
                 return res.json();
             }).then(json=>{
                 this.roi_pairs = json.roi_pairs;
+                this.compute_minmax();  
 
                 //find unique rois
                 let columns = this.roi_pairs.reduce((a,c)=>{
@@ -217,21 +257,6 @@ Vue.component('nnview', {
                     return a;
                 }, new Set());
                 this.columns = [...columns].sort();   
-
-                /*
-                //find min/max value
-                let min = null;
-                let max = null;
-                this.roi_pairs.forEach(roi=>{
-                    let v = roi.weights.count;
-                    if(v < min || min === null) min = v;
-                    if(v > max || max === null) max = v;
-
-                    roi._selected = false;
-                });
-                console.log("min", min);
-                console.log("max", max);
-                */
 
                 //load fibers
                 let vtkloader = new THREE.VTKLoader();
@@ -307,6 +332,7 @@ Vue.component('nnview', {
                 }, err=>{
                     this.loading = false;
                     console.timeEnd('loading_pairs');
+
                 });
             });
         },
@@ -405,28 +431,47 @@ Vue.component('nnview', {
 
         getcolor(pair) {
             //default
-            let h = 200;
+            let h = 0;
             let s = 10;
-            let l = 30;
+            let l = 50;
             let a = 1;
 
             //return "white";
 
             //apply alpha using weight
+            /*
             switch(this.weight_field) {
             case "count":
                 a = Math.max(Math.log(pair.weights.count)/4, 0);
                 break;
             case "density":
-                a = pair.weights.density*200;
+                a = pair.weights.density.map(this.min_weight, this.max_weight, 0, 1);
                 //console.log(a);
                 break;
             }
-    
-            if(pair._mesh) l = 80;
+            */
+            let v = pair.weights[this.weight_field];
+            //let mid_weight = (this.max_weight - this.min_weight)/100; //only show bottom half
+            a = v.map(this.min_weight, this.max_weight, 0, 1);
+            /*
+            let minp = 0;
+            let maxp = 1.0;
+            let mid_weight = (this.max_weight - this.min_weight)/100; //crop bottom half
+            let minv = Math.log(this.min_weight); 
+            let maxv = Math.log(this.max_weight);
+            let scale = (maxv-minv)/(maxp-minp);
+
+            let v = pair.weights[this.weight_field];
+            a = (Math.log(v)-minv) / scale + minp;
+            a = Math.max(a, 0);//clip at 0
+            //console.log(v, (Math.log(v)-minv)/scale);
+            if(pair.roi1 == "1001" && pair.roi2 == "1002") console.log(mid_weight);
+            */
+
+            if(pair._mesh) l = 100;
             if(pair._selected) {
                 s = 100; //maybe I should use weights for this to show the original weight?
-                l = 50;
+                //l = 50;
                 h = 0;
                 a = 1.0;
             } else {
@@ -538,6 +583,7 @@ Vue.component('nnview', {
         },
 
         mousemove(event) {
+            if(event.buttons) return; //dragging?
             this.mouse_moved = new THREE.Vector2();
             this.mouse_moved.x = ( event.clientX / window.innerWidth ) * 2 - 1;
             this.mouse_moved.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
@@ -564,27 +610,32 @@ Vue.component('nnview', {
             //console.log(this.hovered_column, column);
             return (this.hoverpair && (this.hoverpair.roi1 == column || this.hoverpair.roi2 == column) || this.hovered_column == column)
         },
-    },
 
-    watch: {
-        /*
-        all_left: function() {
-            this.meshes.forEach(m => {
-                if (!isRightTract(m.name)) m.visible = this.all_left;
-            });
-        },
+        compute_legendvalue(i) {
+            //let mid_weight = (this.max_weight-this.min_weight)/2;
+            //if(i == 0) return mid_weight.toFixed(3);
+            let v = i.map(0, 100, this.min_weight, this.max_weight);
+            /*
+            // position will be between 0 and 100
+            let minp = 0;
+            let maxp = 100;
 
-        all_right: function() {
-            this.meshes.forEach(m => {
-                if (isRightTract(m.name)) m.visible = this.all_right;
-            });
+            // The result should be between min/max weight
+            let minv = Math.log(this.min_weight); //min_weight needs to be non 0 for scaling to work correctly.
+            let maxv = Math.log(this.max_weight);
+
+            // calculate adjustment factor
+            let scale = (maxp-minp)/(maxv-minv);
+            let v = Math.exp(minv - scale*(i-minp));
+            */
+            if(this.max_weight < 1 && i != 0) return v.toFixed(3);
+            return v.toFixed(0);
         },
-        */
     },
 
     template: `
     <div class="container" style="display:inline-block;">
-         <div ref="style" scoped></div>
+         <div ref="stats" v-show="show_stats"/>
          <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove" @click="click"></div>
          <div v-if="loading" class="loading">Loading .. <small>{{loading}}</small></div>
          <div class="status">
@@ -593,68 +644,42 @@ Vue.component('nnview', {
              Network Neuro<br>
             <b>Brent McPherson</b>
          </div>
-         <div class="amatrix" v-if="roi_pairs">
-            <svg> 
-                <g transform="rotate(-90 315 305)">
-                    <text v-for="(column, idx) in columns" :key="idx" 
-                        :x="9*idx-2" :y="9*idx-2" text-anchor="start"
-                        class="label" :class="{'label-selected':is_hovered(column)}"
-                        :transform="'rotate(135 '+(9*idx)+' '+(9*idx)+')'" 
-                        @mouseover="mouseover_column(column)"
-                        @mouseleave="mouseleave_column(column)"
-                        :fill="getcolumncolor(column)">{{labels_o[column].name}}</text>
 
-                    <rect v-for="pair in roi_pairs" class="roi"
-                        :x="columns.indexOf(pair.roi2)*9" 
-                        :y="columns.indexOf(pair.roi1)*9" 
-                        :fill="getcolor(pair)"
-                        width="8" height="8" 
-                        @mouseover="mouseover(pair)"
-                        @mouseleave="mouseleave(pair)"
-                        @click="clickpair(pair)"/>
-                </g>
-            </svg>
-        </div>
-        <!--
-        <div class="controls" v-if="controls">
-            <input type="checkbox" name="enableRotation" v-model="controls.autoRotate" /> Rotate
-        </div>
-        -->
+        <svg class="amatrix" v-if="roi_pairs"> 
+            <g transform="rotate(-90 315 305)">
+                <text v-for="(column, idx) in columns" :key="idx" 
+                    :x="9*idx-2" :y="9*idx-2" text-anchor="start"
+                    class="label" :class="{'label-selected':is_hovered(column)}"
+                    :transform="'rotate(135 '+(9*idx)+' '+(9*idx)+')'" 
+                    @mouseover="mouseover_column(column)"
+                    @mouseleave="mouseleave_column(column)"
+                    :fill="getcolumncolor(column)">{{labels_o[column].name}}</text>
+
+                <rect v-for="pair in roi_pairs" class="roi"
+                    :x="columns.indexOf(pair.roi2)*9" 
+                    :y="columns.indexOf(pair.roi1)*9" 
+                    :fill="getcolor(pair)"
+                    width="8" height="8" 
+                    @mouseover="mouseover(pair)"
+                    @mouseleave="mouseleave(pair)"
+                    @click="clickpair(pair)"/>
+            </g>
+        </svg>
+        <svg class="legend" v-if="max_weight">
+            <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:rgb(0,0,0);stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:rgb(255,255,255);stop-opacity:1" />
+                </linearGradient>
+            </defs>
+            <text x="45" y="15" fill="white" text-anchor="end">{{weight_field}}</text>
+            <rect x="55" y="5" fill="url(#grad1)" width="250" height="10" />   
+            <line x1="55" y1="17.5" x2="305" y2="17.5" style="stroke:rgba(255,255,255,0.3)" />
+            <g v-for="i in [0, 20, 40, 60, 80, 100]">
+                <text :x="55+(250/100*i)" y="28" class="number" :text-anchor="'end'">{{compute_legendvalue(i)}}</text>
+            </g>
+        </svg>
+    
     </div>            
     `
 })
-
-/*
-let white_material = new THREE.LineBasicMaterial({
-    color: new THREE.Color(1, 1, 1)
-});
-
-function getHashValue(key) {
-    var matches = window.parent.location.hash.match(new RegExp(key+'=([^&]*)'));
-    return matches ? decodeURIComponent(matches[1]) : null;
-}
-
-// returns whether or not the tractName is considered to be a left tract
-function isLeftTract(tractName) {
-    return tractName.startsWith('Left ') || tractName.endsWith(' L');
-}
-
-// remove the 'left' part of the tract text
-function removeLeftText(tractName) {
-    if (tractName.startsWith('Left ')) tractName = tractName.substring(5);
-    if (tractName.endsWith(' L')) tractName = tractName.substring(0, tractName.length - 2);
-    return tractName;
-}
-
-// returns whether or not the tractName is considered to be a right tract
-function isRightTract(tractName) {
-    return tractName.startsWith('Right ') || tractName.endsWith(' R');
-}
-
-// remove the 'right' part of the tract text
-function removeRightText(tractName) {
-    if (tractName.startsWith('Right ')) tractName = tractName.substring(6);
-    if (tractName.endsWith(' R')) tractName = tractName.substring(0, tractName.length - 2);
-    return tractName;
-}
-*/
