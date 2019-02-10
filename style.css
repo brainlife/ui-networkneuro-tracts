@@ -117,6 +117,7 @@ font-size: 16px;
 opacity:.2;
 color:white;
 text-align: right;
+pointer-events:none;
 }
 
 .loading {

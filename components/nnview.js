@@ -1,10 +1,17 @@
-let last_mouseover;
+let last_intersect_check;
 
 //linear scaling.. I think we need inverse log.
 Number.prototype.map = function (in_min, in_max, out_min, out_max) {
     return (this - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
+//import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from '../node_modules/three-mesh-bvh/umd/index.js';
+
+/*
+THREE.BufferGeometry.prototype.computeBoundsTree = window.MeshBVHLib.computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = window.MeshBVHLib.disposeBoundsTree;
+THREE.Mesh.prototype.raycast = window.MeshBVHLib.acceleratedRaycast;
+*/
 
 Vue.component('nnview', {
     data () {
@@ -35,7 +42,6 @@ Vue.component('nnview', {
             columns: [], //list of roi (1001, 1002, etc..) in the order we want to display them in
 
             raycaster: new THREE.Raycaster(),
-            mouse_moved: null,
 
             gui: new dat.GUI(),
             stats: new Stats(),
@@ -56,6 +62,12 @@ Vue.component('nnview', {
     },
 
     mounted() {
+
+        //weird way to register fast raycaster
+        THREE.BufferGeometry.prototype.computeBoundsTree = window.MeshBVHLib.computeBoundsTree;
+        THREE.BufferGeometry.prototype.disposeBoundsTree = window.MeshBVHLib.disposeBoundsTree;
+        THREE.Mesh.prototype.raycast = window.MeshBVHLib.acceleratedRaycast;
+
         this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
 
         this.scene = new THREE.Scene();
@@ -217,9 +229,12 @@ Vue.component('nnview', {
                             color: new THREE.Color(label.color.r/256*1.25, label.color.g/256*1.25, label.color.b/256*1.25),
                             shininess: 80,
                         });
+
+                        geometry.computeBoundsTree(); //for BVH
+
+                        //geometry.computeBoundingBox();
                         /*
                         //calculate mesh center (for pointers)
-                        geometry.computeBoundingBox();
                         var center = new THREE.Vector3();
                         geometry.boundingBox.getCenter(center);
                         mesh.localToWorld( center );
@@ -293,8 +308,7 @@ Vue.component('nnview', {
         
                     //var label = this.labels_o[pair.roi1];
                     var material = new THREE.LineBasicMaterial({
-                        //color: new THREE.Color(label.color.r/256*3, label.color.g/256*3, label.color.b/256*3),
-                        color: this.gettractcolor(pair, 3),
+                        color: this.gettractcolor(pair,0.2),
                         transparent: true,
                         opacity: this.tract_opacity,
                         //vertexColors: THREE.VertexColors
@@ -311,7 +325,7 @@ Vue.component('nnview', {
                     //this.$forceUpdate();
                 }
 
-                async.eachSeries(this.roi_pairs/*.slice(0, 100)*/, (pair, next_pair)=>{
+                async.eachSeries(this.roi_pairs, (pair, next_pair)=>{
                     if(pair.filename == "") return next_pair();
                     let batch = batches[pair.filename];
                     if(batch === undefined) {
@@ -344,16 +358,7 @@ Vue.component('nnview', {
             this.controls.update();
             this.camera_light.position.copy(this.camera.position);
 
-            //find_roi_mesh is slow, so let's only test when a mouse moves and on an animaite frame
-            if(this.mouse_moved) {
-                let obj = this.find_roi_mesh(this.mouse_moved);
-                this.hovered_column = null;
-                if(obj) this.hovered_column = obj._roi;
-                this.mouse_moved = null;
-            }
-    
             this.update_rois();
-            this.update_pointers();
 
             if(this.hoverpair && this.hoverpair._mesh) {
                 //pick the milliseconds
@@ -388,38 +393,6 @@ Vue.component('nnview', {
                     else mesh.material = label._material;
                 }
             });
-        },
-
-        update_pointers() {
-            if(!this.hoverpair) {
-                //this.roi1_pointer.visible = false;
-                //this.roi2_pointer.visible = false;
-                return;
-            }
-
-            var label = this.labels_o[this.hoverpair.roi1];
-            if(label._mesh) {
-                /*
-                //create new geometry
-                var pos1 = new THREE.Vector3( 0.3, 0, 0.5 );
-                pos1.unproject(this.camrea);
-                //pos1.applyAxisAngle( new THREE.Vector3( 1, 0, 0 ), Math.PI/2 );
-                var pos2 = new THREE.Vector3( 0.2, 0.5, 0 );
-                pos2.unproject(this.camera);
-                //pos2.applyAxisAngle( new THREE.Vector3( 1, 0, 0 ), Math.PI/2 );
-                var pos3 = new THREE.Vector3( 0, 0.25, 0 );
-                pos3.unproject(this.camera)
-                //pos3.applyAxisAngle( new THREE.Vector3( 1, 0, 0 ), Math.PI/2 );
-                var curve = new THREE.CubicBezierCurve3(
-                    label._position, pos3, pos2, pos1,
-                );
-                this.roi1_pointer.geometry.vertices = curve.getPoints(10);
-                this.roi1_pointer.geometry.verticesNeedUpdate = true;
-                    
-                this.roi1_pointer.visible = true;
-                //this.roi2_pointer.visible = true;
-                */
-            }
         },
 
         resized() {
@@ -498,32 +471,37 @@ Vue.component('nnview', {
                 }
 
                 //then decide the color
-                if(hover_label1 && hover_label2) {
-                    return this.gettractcolor(pair, 2).getStyle();
-                } else if(hover_label1 || hover_label2) {
+                if(hover_label1 || hover_label2) {
                     //get roi color
                     let color;
                     if(hover_label1 && pair.roi1 == hover_label1.label) color = hover_label1.color;
                     if(hover_label2 && pair.roi2 == hover_label2.label) color = hover_label2.color;
-                    let c = new THREE.Color(color.r*2/256, color.g*2/256, color.b*2/256);
+                    let c = new THREE.Color(color.r/256, color.g/256, color.b/256);
 
                     //massage it a bit
-                    let hsl = {h, s, l};
+                    let hsl = {};
                     c.getHSL(hsl);
                     h = hsl.h*360;
-                    l = hsl.l*100;
-                    s = 50;
-                    a = Math.max(a, 0.4);      
+                    s = hsl.s*100;
+                    l = Math.max(hsl.l, 0.5)*100;
+                    a = Math.max(a*3, 0.15);      
                 }
             }
             return "hsla("+h+", "+s+"%, "+l+"%, "+a+")";
         },
 
-        gettractcolor(pair, multi) {
+        gettractcolor(pair, loffset) {
+            //compute the average hue from roi1 and roi2 colors.
             let label1 = this.labels_o[pair.roi1];
             let label2 = this.labels_o[pair.roi2];
-            //TODO - find middle color between label1 and label2 (and inverse it?)
-            return new THREE.Color(label1.color.r*multi/256, label1.color.g*multi/256, label1.color.b*multi/256);
+            let c1 = new THREE.Color(label1.color.r/256, label1.color.g/256, label1.color.b/256);
+            let c2 = new THREE.Color(label2.color.r/256, label2.color.g/256, label2.color.b/256);
+            let hsl1 = {};
+            c1.getHSL(hsl1);
+            let hsl2 = {};
+            c2.getHSL(hsl2);
+            let fin = new THREE.Color();
+            return fin.setHSL((hsl1.h+hsl2.h)/2, 1, 0.8);    
         },
 
         getcolumncolor(column) {
@@ -537,13 +515,14 @@ Vue.component('nnview', {
             if(mesh) mesh.visible = vis;
         },
 
-        mouseover(pair) {
+        mouseover_pair(pair) {
+            this.hovered_column = null; //mouseleave_column event doesn't fire sometimes
             this.hoverpair = pair;
             if(pair._mesh) pair._mesh.visible = true;
             this.showhide_roi(pair.roi1, true);
             this.showhide_roi(pair.roi2, true);
         },
-        mouseleave(pair) {
+        mouseleave_pair(pair) {
             if(this.hoverpair._mesh) {
                 //restore opacity
                 this.hoverpair._mesh.material.opacity = this.tract_opacity;
@@ -554,7 +533,6 @@ Vue.component('nnview', {
             this.showhide_roi(pair.roi1, selected.has(pair.roi1));
             this.showhide_roi(pair.roi2, selected.has(pair.roi2));
         },
-
         mouseover_column(column) {
             let label = this.labels_o[column];
             this.hovered_column = column;
@@ -583,6 +561,9 @@ Vue.component('nnview', {
             this.raycaster.setFromCamera( mouse, this.camera );
             let intersects = this.raycaster.intersectObjects(this.scene.children);
 
+            //console.log("find_roi_mesh");
+            //intersects.forEach(it=>{console.log(it.object._roi)});
+
             //select first roi mesh
             for(let i = 0;i < intersects.length; ++i) {
                 let obj = intersects[i].object;
@@ -590,19 +571,32 @@ Vue.component('nnview', {
             }
             return null;
         },
-
-        mousemove(event) {
-            if(event.buttons) return; //dragging?
-            this.mouse_moved = new THREE.Vector2();
-            this.mouse_moved.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-            this.mouse_moved.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-        },
         
         click(event) {
-            let obj = this.find_roi_mesh(event);
-            if(obj) {
-                //TODO roi clicked.. what do I do?
-            }
+            /*
+            let mouse = new THREE.Vector2();
+            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+            let obj = this.find_roi_mesh(mouse);
+            this.hovered_column = null;
+            if(obj) this.hovered_column = obj._roi;  
+            */
+        },
+
+        mousemove(event) {
+            if(event.buttons) return; //ignore dragging events
+            /*
+            //checking intersect takes time. let's not check it if it's checked recently.
+            let now = new Date().getTime();
+            if(now - last_intersect_check < 300) return;
+            last_intersect_check = now;
+            */
+            let mouse = new THREE.Vector2();
+            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+            let obj = this.find_roi_mesh(mouse);
+            if(obj) this.hovered_column = obj._roi;  
+            else this.hovered_column = null;
         },
 
         selected_rois: function() {
@@ -616,7 +610,6 @@ Vue.component('nnview', {
         },
 
         is_hovered: function(column) {
-            //console.log(this.hovered_column, column);
             return (this.hoverpair && (this.hoverpair.roi1 == column || this.hoverpair.roi2 == column) || this.hovered_column == column)
         },
 
@@ -669,8 +662,8 @@ Vue.component('nnview', {
                     :y="columns.indexOf(pair.roi1)*9" 
                     :fill="getcolor(pair)"
                     width="8" height="8" 
-                    @mouseover="mouseover(pair)"
-                    @mouseleave="mouseleave(pair)"
+                    @mouseover="mouseover_pair(pair)"
+                    @mouseleave="mouseleave_pair(pair)"
                     @click="clickpair(pair)"/>
             </g>
         </svg>
@@ -681,11 +674,11 @@ Vue.component('nnview', {
                     <stop offset="100%" style="stop-color:rgb(255,255,255);stop-opacity:1" />
                 </linearGradient>
             </defs>
-            <text x="45" y="15" fill="white" text-anchor="end">{{weight_field}}</text>
-            <rect x="55" y="5" fill="url(#grad1)" width="250" height="10" />   
-            <line x1="55" y1="17.5" x2="305" y2="17.5" style="stroke:rgba(255,255,255,0.3)" />
+            <!--<text x="45" y="15" fill="white" text-anchor="end">{{weight_field}}</text>-->
+            <rect x="10" y="5" fill="url(#grad1)" width="250" height="10" />   
+            <line x1="10" y1="17.5" x2="260" y2="17.5" style="stroke:rgba(255,255,255,0.3)" />
             <g v-for="i in [0, 20, 40, 60, 80, 100]">
-                <text :x="55+(250/100*i)" y="28" class="number" :text-anchor="'end'">{{compute_legendvalue(i)}}</text>
+                <text :x="10+(250/100*i)" y="28" class="number" :text-anchor="i==0?'start':'end'">{{compute_legendvalue(i)}}</text>
             </g>
         </svg>
     
