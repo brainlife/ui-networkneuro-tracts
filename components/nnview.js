@@ -24,6 +24,7 @@ Vue.component('nnview', {
 
             hoverpair: null, //roi pair hovered on amatrix
             hovered_column: null, //roi mesh hovered on nnview
+            pushed_roi: null, 
 
             loading: false,
 
@@ -179,9 +180,15 @@ Vue.component('nnview', {
                         //we could also use MeshStandardMetarial
                         //MeshPhongMaterial
                         //MeshLambertMaterial
-                        label.__lightlight_material = new THREE.MeshPhongMaterial({
+                        label.__highlight_material = new THREE.MeshPhongMaterial({
                             color: new THREE.Color(label.color.r/256*1.25, label.color.g/256*1.25, label.color.b/256*1.25),
                             shininess: 80,
+                        });
+                        label.__xray_material = new THREE.MeshLambertMaterial({
+                            color: new THREE.Color(label.color.r/256*1.25, label.color.g/256*1.25, label.color.b/256*1.25),
+                            transparent: true,
+                            opacity: 0.25,
+                            depthTest: false,
                         });
 
                         geometry.computeBoundsTree(); //for BVH
@@ -339,7 +346,8 @@ Vue.component('nnview', {
                         if(this.hoverpair.roi1 == label.label) highlight = true;
                         if(this.hoverpair.roi2 == label.label) highlight = true;
                     }
-                    if(highlight) mesh.material = label.__lightlight_material;
+                    if(mesh._roi == this.pushed_roi) mesh.material = label.__xray_material;
+                    else if(highlight) mesh.material = label.__highlight_material;
                     else mesh.material = label._material;
                 }
             });
@@ -507,12 +515,12 @@ Vue.component('nnview', {
             this.$forceUpdate();
         },
 
-        find_roi_mesh(mouse) {
+        find_roi_mesh(event) {
+            let mouse = new THREE.Vector2();
+            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
             this.raycaster.setFromCamera( mouse, this.camera );
             let intersects = this.raycaster.intersectObjects(this.scene.children);
-
-            //console.log("find_roi_mesh");
-            //intersects.forEach(it=>{console.log(it.object._roi)});
 
             //select first roi mesh
             for(let i = 0;i < intersects.length; ++i) {
@@ -522,29 +530,22 @@ Vue.component('nnview', {
             return null;
         },
         
-        click(event) {
-            /*
-            let mouse = new THREE.Vector2();
-            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-            let obj = this.find_roi_mesh(mouse);
-            this.hovered_column = null;
-            if(obj) this.hovered_column = obj._roi;  
-            */
+        mousedown(event) {
+            let obj = this.find_roi_mesh(event);
+            //this.hovered_column = null;
+            if(obj) {
+                let label = this.labels_o[obj._roi];
+                this.pushed_roi = obj._roi;
+            }
+        },
+
+        mouseup(event) {
+            this.pushed_roi = null;
         },
 
         mousemove(event) {
             if(event.buttons) return; //ignore dragging events
-            /*
-            //checking intersect takes time. let's not check it if it's checked recently.
-            let now = new Date().getTime();
-            if(now - last_intersect_check < 300) return;
-            last_intersect_check = now;
-            */
-            let mouse = new THREE.Vector2();
-            mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-            let obj = this.find_roi_mesh(mouse);
+            let obj = this.find_roi_mesh(event);
             if(obj) this.hovered_column = obj._roi;  
             else this.hovered_column = null;
         },
@@ -588,7 +589,10 @@ Vue.component('nnview', {
     template: `
     <div class="container" style="display:inline-block;">
          <div ref="stats" v-show="show_stats"/>
-         <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" @mousemove="mousemove" @click="click"></div>
+         <div id="conview" class="conview" ref="view" style="position:absolute; width: 100%; height:100%;" 
+            @mousemove="mousemove" 
+            @mousedown="mousedown"
+            @mouseup="mouseup"></div>
          <div v-if="loading" class="loading">Loading .. <small>{{loading}}</small></div>
          <div class="status">
              <small v-if="hoverpair">{{hoverpair.weights}}</small><br>
