@@ -5,14 +5,6 @@ Number.prototype.map = function (in_min, in_max, out_min, out_max) {
     return (this - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-//import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from '../node_modules/three-mesh-bvh/umd/index.js';
-
-/*
-THREE.BufferGeometry.prototype.computeBoundsTree = window.MeshBVHLib.computeBoundsTree;
-THREE.BufferGeometry.prototype.disposeBoundsTree = window.MeshBVHLib.disposeBoundsTree;
-THREE.Mesh.prototype.raycast = window.MeshBVHLib.acceleratedRaycast;
-*/
-
 Vue.component('nnview', {
     data () {
         return {
@@ -47,14 +39,8 @@ Vue.component('nnview', {
             stats: new Stats(),
             show_stats: false,
 
-            /*
-            controls: {
-                autoRotate: true,
-            }
-            */
             weight_field: 'count',
             min_weight: null,
-            //min_non0_weight: null,
             max_weight: null,
 
             tract_opacity: 0.6,
@@ -93,43 +79,14 @@ Vue.component('nnview', {
 
         this.load();
 
-        /*
-        //create pointers
-        var geometry = new THREE.Geometry();
-        var material = new THREE.LineBasicMaterial( { color : 0xff0000 } );
-
-        this.roi1_pointer = new THREE.Line( geometry, material );
-        this.roi1_pointer.rotation.x = -Math.PI/2;
-        this.roi1_pointer.visible = false;
-        this.scene.add(this.roi1_pointer);
-        
-        this.roi2_pointer = new THREE.Line( geometry, material );
-        this.roi2_pointer.rotation.x = -Math.PI/2;
-        this.roi2_pointer.visible = false;
-        this.scene.add(this.roi2_pointer);
-        */
-
         this.renderer.autoClear = false;
         this.renderer.setSize(viewbox.width, viewbox.height);
-        //this.renderer.setClearColor(new THREE.Color(.15,.14,.13));
         this.$refs.view.appendChild(this.renderer.domElement);
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.autoRotate = true;
         this.controls.addEventListener('start', ()=>{
             this.controls.autoRotate = false;
         });
-
-        /*
-        this.composer = new THREE.EffectComposer( this.renderer );
-        this.composer.addPass( new THREE.RenderPass( this.scene, this.camera ) );
-
-        let hblur = new THREE.ShaderPass( THREE.HorizontalBlurShader );
-        this.composer.addPass( hblur );
-        
-        let vblur = new THREE.ShaderPass( THREE.VerticalBlurShader );
-        vblur.renderToScreen = true;
-        this.composer.addPass( vblur );
-        */
 
         window.addEventListener("resize", this.resized);
 
@@ -151,12 +108,10 @@ Vue.component('nnview', {
             this.roi_pairs.forEach(roi=>{
                 let v = roi.weights[this.weight_field];
                 if(v < min || min === null) min = v;
-                //if(v < min_non0 || min_non0 === null || min_non0 == 0) min_non0 = v;
                 if(v > max || max === null) max = v;
                 //roi._selected = false; //this was needed at some point.. to fix some UI bug.
             });
             this.min_weight = min;
-            //this.min_non0_weight = min_non0;
             this.max_weight = max;
         },
 
@@ -165,7 +120,6 @@ Vue.component('nnview', {
             var ui = this.gui.addFolder('UI');
             ui.add(this.controls, 'autoRotate').listen();
             ui.add(this, 'show_stats');
-            //f1.add(this, 'noiseStrength');
             ui.open();
 
             var matrix = this.gui.addFolder('Matrix');
@@ -198,7 +152,7 @@ Vue.component('nnview', {
                     if(!((label.label > 1000 && label.label < 1036) || (label.label > 2000 && label.label < 2036))) return next_label();
 
                     let tokens = label.name.split("-");
-                    let vtk = "testdata/decimate/ctx-"+tokens[0]+"h-"+tokens[1]+".vtk";
+                    let vtk = "testdata/decimate/"+label.label+"."+tokens[0]+"-"+tokens[1]+".vtk";
                     vtkloader.load(vtk, geometry => {
                         let back_material = new THREE.MeshBasicMaterial({
                             color: new THREE.Color(0,0,0),
@@ -278,7 +232,6 @@ Vue.component('nnview', {
                 let tracts = new THREE.Object3D();
                 this.scene.add(tracts);
                 this.loading = true;
-                console.time('loading_pairs');
                 let batches = {};
 
                 function create_mesh(pair, coords) {
@@ -345,8 +298,6 @@ Vue.component('nnview', {
                     }
                 }, err=>{
                     this.loading = false;
-                    console.timeEnd('loading_pairs');
-
                 });
             });
         },
@@ -372,7 +323,6 @@ Vue.component('nnview', {
             this.renderer.render(this.back_scene, this.camera);
             this.renderer.clearDepth();
             this.renderer.render(this.scene, this.camera);
-            //this.composer.render();
 
             this.stats.end();
             requestAnimationFrame(this.render);
