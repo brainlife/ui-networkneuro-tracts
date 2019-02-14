@@ -242,14 +242,19 @@ Vue.component('nnview', {
                 let batches = {};
 
                 function create_mesh(pair, coords) {
+                    if(!coords) {
+                        console.log("invalid coords");
+                        console.dir(pair);
+                        return;
+                    }
                     //console.log("creating mesh for", pair.roi1, pair.roi2)
                     //convert each bundle to threads_pos array
                     var threads_pos = [];
                     if(!Array.isArray(coords)) coords = [coords];
                     coords.forEach(function(fascicle) {
-                        var xs = fascicle.x;
-                        var ys = fascicle.y;
-                        var zs = fascicle.z;
+                        var xs = fascicle[0];
+                        var ys = fascicle[1];
+                        var zs = fascicle[2];
                         for(var i = 1;i < xs.length;++i) {
                             threads_pos.push(xs[i-1]);
                             threads_pos.push(ys[i-1]);
@@ -295,12 +300,12 @@ Vue.component('nnview', {
                             return res.json();
                         }).then(json=>{
                             batches[pair.filename] = json;
-                            create_mesh.call(this, pair, json[pair.idx].coords);    
+                            create_mesh.call(this, pair, json[pair.idx-1]);    
                             setTimeout(next_pair, 0); //yeild to ui
                         });
                     } else {
                         //already loaded.. pick an idx
-                        create_mesh.call(this, pair, batch[pair.idx].coords);    
+                        create_mesh.call(this, pair, batch[pair.idx-1]);
                         setTimeout(next_pair, 0); //yeild to ui
                     }
                 }, err=>{
