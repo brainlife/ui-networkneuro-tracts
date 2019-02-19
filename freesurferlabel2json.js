@@ -15,7 +15,7 @@ fslabels.split("\n").forEach(line=>{
     }
     labels.push({
         "label": cols[0],
-        name,
+        name: cols[1],
         color: {
             "r": +cols[2],
             "g": +cols[3],
