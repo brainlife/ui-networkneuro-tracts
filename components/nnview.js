@@ -133,7 +133,7 @@ Vue.component('nnview', {
             fetch("labels.json").then(res=>{
                 return res.json();
             }).then(json=>{
-                this.labels = json.labels;
+                this.labels = json;
 
                 //convert label name "1001" to 1001 to be consistent
                 this.labels.forEach(label=>{label.label = parseInt(label.label);});
@@ -152,8 +152,8 @@ Vue.component('nnview', {
                     //only try loading lables that we care..
                     if(!((label.label > 1000 && label.label < 1036) || (label.label > 2000 && label.label < 2036))) return next_label();
 
-                    let tokens = label.name.split("-");
-                    let vtk = "testdata/decimate/"+label.label+"."+tokens[0]+"-"+tokens[1]+".vtk";
+                    console.log(label);
+                    let vtk = "testdata/surfaces/"+label.label+"."+label.name+".vtk";
                     vtkloader.load(vtk, geometry => {
                         let back_material = new THREE.MeshBasicMaterial({
                             color: new THREE.Color(0,0,0),
