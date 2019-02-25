@@ -6,6 +6,7 @@ Number.prototype.map = function (in_min, in_max, out_min, out_max) {
 }
 
 Vue.component('nnview', {
+    props: [ "config" ],
     data () {
         return {
             renderer: null,
@@ -128,9 +129,15 @@ Vue.component('nnview', {
             matrix.open();
         },
 
+        fullurl(path) {
+            let url = this.config.urlbase+"/"+path;
+            if(this.config.jwt) url += "?jwt="+this.config.jwt;
+            return url;
+        },
+
         load() {
             //load lables and mesh
-            fetch("labels.json").then(res=>{
+            fetch(this.fullurl("labels.json")).then(res=>{
                 return res.json();
             }).then(json=>{
                 this.labels = json.labels;
@@ -153,7 +160,7 @@ Vue.component('nnview', {
                     if(!((label.label > 1000 && label.label < 1036) || (label.label > 2000 && label.label < 2036))) return next_label();
 
                     let tokens = label.name.split("-");
-                    let vtk = "testdata/decimate/"+label.label+"."+tokens[0]+"-"+tokens[1]+".vtk";
+                    let vtk = this.fullurl("surfaces/"+label.label+"."+tokens[0]+"-"+tokens[1]+".vtk");
                     vtkloader.load(vtk, geometry => {
                         let back_material = new THREE.MeshBasicMaterial({
                             color: new THREE.Color(0,0,0),
@@ -215,8 +222,7 @@ Vue.component('nnview', {
         },
 
         load_pairs() {
-    
-            fetch("testdata/networkneuro/index.json").then(res=>{
+            fetch(this.fullurl("roipairs/index.json")).then(res=>{
                 return res.json();
             }).then(json=>{
                 this.roi_pairs = json.roi_pairs;
@@ -296,7 +302,7 @@ Vue.component('nnview', {
                     if(batch === undefined) {
                         this.loading = pair.filename;
                         console.log(pair.filename);
-                        fetch("testdata/networkneuro/"+pair.filename).then(res=>{
+                        fetch(this.fullurl("roipairs/"+pair.filename)).then(res=>{
                             return res.json();
                         }).then(json=>{
                             batches[pair.filename] = json;
