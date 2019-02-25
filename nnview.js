@@ -131,7 +131,7 @@ Vue.component('nnview', {
 
         fullurl(path) {
             let url = this.config.urlbase+"/"+path;
-            if(this.config.jwt) url += "?jwt="+this.config.jwt;
+            if(this.config.jwt) url += "?at="+this.config.jwt;
             return url;
         },
 
