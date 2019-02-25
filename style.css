@@ -155,8 +155,7 @@ background-color: black;
 position: fixed;
 top: 25px;
 left: 0px;
-}
-.amatrix {
+
 pointer-events:none;
 height: 100%;
 width: 100%;

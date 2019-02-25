@@ -1,3 +1,4 @@
+#!/usr/bin/node 
 const fs = require('fs');
 const fslabels = fs.readFileSync("FreeSurferColorLUT.txt","ascii");
 
@@ -15,7 +16,7 @@ fslabels.split("\n").forEach(line=>{
     }
     labels.push({
         "label": cols[0],
-        name,
+        name: cols[1],
         color: {
             "r": +cols[2],
             "g": +cols[3],
@@ -24,4 +25,4 @@ fslabels.split("\n").forEach(line=>{
     });
 });
 
-fs.writeFileSync("labels.js", "var labels = "+JSON.stringify(labels, null, 4));
+fs.writeFileSync("labels.json", JSON.stringify(labels, null, 4));
