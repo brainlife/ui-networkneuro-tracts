@@ -13,7 +13,7 @@
 <body>
     <div id="networkneuro" v-cloak>
         <div class="error" v-if="error">{{error}}</div>
-        <nnview v-else/>
+        <nnview :config="config" v-else/>
     </div>
 	
 	<!-- Dep Scripts -->
@@ -41,14 +41,24 @@
 	<script type="text/javascript" src="lib/dist.bundled.js"></script>
     <!--<script type="text/javascript" src="lib/stats.js"></script>-->
     
-    <script type="text/javascript" src="components/nnview.js"></script>
+    <script type="text/javascript" src="nnview.js"></script>
 
 	<script type="module">
+        let config = window.config || window.parent.config;
+        if(!config) {
+            //debug/demo config
+            config = {
+                urlbase: "testdata", //root of where I can find /surfaces and /roipairs and labels.json
+                jwt: null, //jwt to add to all urls
+            }
+        }
+
         new Vue({
             el: '#networkneuro',
             data: function() {
                 return {
                     error: null,
+                    config,
                 }
             },
             components: ['nnview'],
