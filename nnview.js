@@ -305,12 +305,12 @@ Vue.component('nnview', {
                             return res.json();
                         }).then(json=>{
                             batches[pair.filename] = json;
-                            create_mesh.call(this, pair, json[pair.idx-1]);    
+                            create_mesh.call(this, pair, json[pair.idx]);    
                             setTimeout(next_pair, 0); //yeild to ui
                         });
                     } else {
                         //already loaded.. pick an idx
-                        create_mesh.call(this, pair, batch[pair.idx-1]);
+                        create_mesh.call(this, pair, batch[pair.idx]);
                         setTimeout(next_pair, 0); //yeild to ui
                     }
                 }, err=>{
