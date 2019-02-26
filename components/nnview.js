@@ -168,6 +168,8 @@ Vue.component('nnview', {
                         });
 
                         geometry.computeVertexNormals(); //for smooth shading
+                        geometry.computeBoundsTree(); //for BVH
+
                         var mesh = new THREE.Mesh( geometry, roi_material );
                         mesh.rotation.x = -Math.PI/2;
                         mesh.visible = false;
@@ -191,7 +193,6 @@ Vue.component('nnview', {
                             depthTest: false,
                         });
 
-                        geometry.computeBoundsTree(); //for BVH
 
                         //geometry.computeBoundingBox();
                         /*
@@ -235,7 +236,6 @@ Vue.component('nnview', {
                 this.columns = [...columns].sort();   
 
                 //load fibers
-                let vtkloader = new THREE.VTKLoader();
                 let tracts = new THREE.Object3D();
                 this.scene.add(tracts);
                 this.loading = true;
