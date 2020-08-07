@@ -1,7 +1,7 @@
 # Network Neuroscience Visualizer
 This is a unique visualizer that symultaneously shows a matrix of structural connections and the anatomy of the connections.
 
-[Demo on brainlife.io](https://brainlife.io/ui/nnview/)
+[Demo on brainlife.io](https://brainlife.io/ui/nnview/) | [brainlife.io DOI](https://doi.org/10.25663/brainlife.ui.3)
 
 ### Authors
 - [Soichi Hayashi](hayashis@iu.edu)
