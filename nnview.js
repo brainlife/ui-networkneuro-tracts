@@ -51,7 +51,7 @@ Vue.component('nnview', {
 
     mounted() {
 
-        //weird way to register fast raycaster
+        //weird way to register fast raycaster	
         THREE.BufferGeometry.prototype.computeBoundsTree = window.MeshBVHLib.computeBoundsTree;
         THREE.BufferGeometry.prototype.disposeBoundsTree = window.MeshBVHLib.disposeBoundsTree;
         THREE.Mesh.prototype.raycast = window.MeshBVHLib.acceleratedRaycast;
@@ -157,8 +157,8 @@ Vue.component('nnview', {
                 let vtkloader = new THREE.VTKLoader();
                 async.eachSeries(this.labels, (label, next_label)=>{
                     //only try loading lables that we care..
-                    if(!((label.label > 1000 && label.label < 1036) || (label.label > 2000 && label.label < 2036))) return next_label();
-                    console.log(label);
+                    //if(!((label.label > 1000 && label.label < 1036) || (label.label > 2000 && label.label < 2036))) return next_label();
+                    console.log("loading surface for", label);
                     let vtk = this.fullurl("surfaces/"+label.label+"."+label.name+".vtk");
                     vtkloader.load(vtk, geometry => {
                         let back_material = new THREE.MeshBasicMaterial({
@@ -199,16 +199,6 @@ Vue.component('nnview', {
                             depthTest: false,
                         });
 
-
-                        //geometry.computeBoundingBox();
-                        /*
-                        //calculate mesh center (for pointers)
-                        var center = new THREE.Vector3();
-                        geometry.boundingBox.getCenter(center);
-                        mesh.localToWorld( center );
-                        label._position = center;
-                        */
-
                         this.$forceUpdate();
                         setTimeout(next_label, 0); //yeild to ui
                     }, progress=>{}, err=>{
@@ -231,6 +221,10 @@ Vue.component('nnview', {
                 //find unique rois
                 let columns = this.roi_pairs.reduce((a,c)=>{
                     //roi1
+                    console.log("looking for roi1", c.roi1);
+                    console.log("out of");
+                    console.dir(this.labels_o);
+
                     let label = this.labels_o[c.roi1];
                     a.add(label.label);
                     //roi2
@@ -247,6 +241,7 @@ Vue.component('nnview', {
                 let batches = {};
 
                 function create_mesh(pair, coords) {
+		    console.log("creating mesh", pair.filename, pair.roi1, pair.roi2);
                     if(!coords) {
                         console.log("invalid coords");
                         console.dir(pair);
@@ -291,8 +286,6 @@ Vue.component('nnview', {
                     tracts.add(mesh);
                     pair._mesh = mesh;
                     pair._roi_material = mesh.material; //store original material to restore from animiation
-
-                    //this.$forceUpdate();
                 }
 
                 async.eachSeries(this.roi_pairs, (pair, next_pair)=>{
@@ -300,7 +293,7 @@ Vue.component('nnview', {
                     let batch = batches[pair.filename];
                     if(batch === undefined) {
                         this.loading = pair.filename;
-                        console.log(pair.filename);
+                        console.log("fetching", pair.filename);
                         fetch(this.fullurl("roipairs/"+pair.filename)).then(res=>{
                             return res.json();
                         }).then(json=>{
@@ -625,7 +618,7 @@ Vue.component('nnview', {
                     :x="columns.indexOf(pair.roi2)*9" 
                     :y="columns.indexOf(pair.roi1)*9" 
                     :fill="getcolor(pair)"
-                    width="8" height="8" 
+                    width="9" height="9" 
                     @mouseover="mouseover_pair(pair)"
                     @mouseleave="mouseleave_pair(pair)"
                     @click="clickpair(pair)"/>
@@ -638,7 +631,6 @@ Vue.component('nnview', {
                     <stop offset="100%" style="stop-color:rgb(255,255,255);stop-opacity:1" />
                 </linearGradient>
             </defs>
-            <!--<text x="45" y="15" fill="white" text-anchor="end">{{weight_field}}</text>-->
             <rect x="10" y="5" fill="url(#grad1)" width="250" height="10" />   
             <line x1="10" y1="17.5" x2="260" y2="17.5" style="stroke:rgba(255,255,255,0.3)" />
             <g v-for="i in [0, 20, 40, 60, 80, 100]">
